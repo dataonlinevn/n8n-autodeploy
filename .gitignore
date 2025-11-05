@@ -1,0 +1,28 @@
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+temp/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+test-results/
+coverage/
+
+# Config files with secrets
+*.secret
+*.key
+config/local.conf
+
+# Backup files
+*.backup
+*.bak
