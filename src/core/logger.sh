@@ -29,7 +29,7 @@ readonly LOG_LEVEL_SUCCESS=4
 LOG_CURRENT_LEVEL=${LOG_CURRENT_LEVEL:-$LOG_LEVEL_INFO}
 
 # File log
-LOG_FILE=${LOG_FILE:-"/var/log/datalonline-manager.log"}
+LOG_FILE=${LOG_FILE:-"/var/log/dataonline-manager.log"}
 
 # Khởi tạo logging
 init_logging() {
@@ -40,13 +40,13 @@ init_logging() {
     if [[ ! -d "$log_dir" ]]; then
         if ! sudo mkdir -p "$log_dir" 2>/dev/null; then
             # Fallback về home directory nếu không tạo được system log
-            LOG_FILE="$HOME/.datalonline-manager.log"
+            LOG_FILE="$HOME/.dataonline-manager.log"
         fi
     fi
     
     # Kiểm tra quyền ghi
     if ! touch "$LOG_FILE" 2>/dev/null; then
-        LOG_FILE="$HOME/.datalonline-manager.log"
+        LOG_FILE="$HOME/.dataonline-manager.log"
     fi
 }
 

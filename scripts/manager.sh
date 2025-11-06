@@ -33,33 +33,119 @@ init_app() {
     log_debug "Ứng dụng đã được khởi tạo"
 }
 
-# Menu chính
+# ===== STATUS HELPERS =====
+
+# Get N8N installation status
+get_n8n_menu_status() {
+    if command_exists docker && docker ps --format '{{.Names}}' | grep -q "^n8n$"; then
+        local version=$(docker exec n8n n8n --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
+        echo -e "${UI_GREEN}🟢 Running (v$version)${UI_NC}"
+    elif [[ -f "/opt/n8n/docker-compose.yml" ]]; then
+        echo -e "${UI_YELLOW}🟡 Installed (stopped)${UI_NC}"
+    else
+        echo -e "${UI_RED}🔴 Not Installed${UI_NC}"
+    fi
+}
+
+# Get SSL status
+get_ssl_menu_status() {
+    local domain=$(config_get "n8n.domain" "")
+    if [[ -n "$domain" ]] && [[ -f "/etc/letsencrypt/live/$domain/fullchain.pem" ]]; then
+        local expiry_date=$(openssl x509 -in "/etc/letsencrypt/live/$domain/fullchain.pem" -noout -enddate 2>/dev/null | cut -d= -f2)
+        local expiry_epoch=$(date -d "$expiry_date" +%s 2>/dev/null || echo 0)
+        local now_epoch=$(date +%s)
+        local days_left=$(((expiry_epoch - now_epoch) / 86400))
+        
+        if [[ $days_left -gt 30 ]]; then
+            echo -e "${UI_GREEN}🟢 Active ($days_left days)${UI_NC}"
+        elif [[ $days_left -gt 0 ]]; then
+            echo -e "${UI_YELLOW}🟡 Expires in $days_left days${UI_NC}"
+        else
+            echo -e "${UI_RED}🔴 Expired${UI_NC}"
+        fi
+    else
+        echo -e "${UI_GRAY}⚪ Not Configured${UI_NC}"
+    fi
+}
+
+# Get backup count
+get_backup_count() {
+    local count=0
+    if [[ -d "/opt/n8n/backups" ]]; then
+        count=$(find /opt/n8n/backups -name "n8n_backup_*.tar.gz" 2>/dev/null | wc -l)
+    fi
+    echo "$count"
+}
+
+# Get workflow count (if N8N API available)
+get_workflow_count_menu() {
+    if command_exists docker && docker ps --format '{{.Names}}' | grep -q "^n8n$"; then
+        local port=$(config_get "n8n.port" "5678")
+        if curl -s "http://localhost:$port/healthz" >/dev/null 2>&1; then
+            # Try to get count via API (if API key available)
+            local api_key_file="/opt/n8n/.n8n-api-key"
+            if [[ -f "$api_key_file" ]]; then
+                local api_key=$(cat "$api_key_file" 2>/dev/null)
+                local response=$(curl -s -H "X-N8N-API-KEY: $api_key" "http://localhost:$port/api/v1/workflows" 2>/dev/null)
+                if command_exists jq && echo "$response" | jq -e '.data' >/dev/null 2>&1; then
+                    local count=$(echo "$response" | jq '.data | length' 2>/dev/null || echo "?")
+                    echo "$count"
+                    return 0
+                fi
+            fi
+        fi
+    fi
+    echo "?"
+}
+
+# Menu chính với status indicators
 show_main_menu() {
     clear
-    echo -e "${LOG_CYAN}╭──────────────────────────────────────────────────────────╮${LOG_NC}"
-    echo -e "${LOG_CYAN}│                $APP_NAME                    │${LOG_NC}"
-    echo -e "${LOG_CYAN}│              Phiên bản phát triển v$APP_VERSION                 │${LOG_NC}"
-    echo -e "${LOG_CYAN}│                https://datalonline.vn                    │${LOG_NC}"
-    echo -e "${LOG_CYAN}╰──────────────────────────────────────────────────────────╯${LOG_NC}"
+    
+    # Get statuses
+    local n8n_status=$(get_n8n_menu_status)
+    local ssl_status=$(get_ssl_menu_status)
+    local backup_count=$(get_backup_count)
+    local workflow_count=$(get_workflow_count_menu)
+    
+    # Header
+    echo -e "${UI_CYAN}╭──────────────────────────────────────────────────────────╮${UI_NC}"
+    echo -e "${UI_CYAN}│                $APP_NAME                    │${UI_NC}"
+    echo -e "${UI_CYAN}│              Phiên bản: v$APP_VERSION                 │${UI_NC}"
+    echo -e "${UI_CYAN}│                https://dataonline.vn                    │${UI_NC}"
+    echo -e "${UI_CYAN}├──────────────────────────────────────────────────────────┤${UI_NC}"
+    
+    # Quick Status Panel
+    echo -e "${UI_CYAN}│${UI_NC} ${UI_WHITE}📊 SYSTEM STATUS${UI_NC}"
+    echo -e "${UI_CYAN}│${UI_NC}   N8N:       $n8n_status"
+    echo -e "${UI_CYAN}│${UI_NC}   SSL:       $ssl_status"
+    echo -e "${UI_CYAN}│${UI_NC}   Backups:   $backup_count backups"
+    echo -e "${UI_CYAN}│${UI_NC}   Workflows: $workflow_count workflows"
+    echo -e "${UI_CYAN}├──────────────────────────────────────────────────────────┤${UI_NC}"
+    
+    # Main Functions - Grouped
+    echo -e "${UI_CYAN}│${UI_NC} ${UI_WHITE}📦 INSTALLATION & SETUP${UI_NC}"
+    echo -e "${UI_CYAN}│${UI_NC}   1️⃣  🚀 Cài đặt N8N"
+    echo -e "${UI_CYAN}│${UI_NC}   5️⃣  🔄 Cập nhật phiên bản"
+    echo -e "${UI_CYAN}│${UI_NC}"
+    echo -e "${UI_CYAN}│${UI_NC} ${UI_WHITE}⚙️  MANAGEMENT${UI_NC}"
+    echo -e "${UI_CYAN}│${UI_NC}   2️⃣  🌐 Quản lý tên miền & SSL"
+    echo -e "${UI_CYAN}│${UI_NC}   3️⃣  ⚙️  Quản lý dịch vụ"
+    echo -e "${UI_CYAN}│${UI_NC}   4️⃣  💾 Sao lưu & khôi phục"
+    echo -e "${UI_CYAN}│${UI_NC}"
+    echo -e "${UI_CYAN}│${UI_NC} ${UI_WHITE}🗄️  DATABASE & WORKFLOWS${UI_NC}"
+    echo -e "${UI_CYAN}│${UI_NC}   6️⃣  🗄️  Quản lý Database"
+    echo -e "${UI_CYAN}│${UI_NC}   7️⃣  🔄 Workflow Manager"
+    echo -e "${UI_CYAN}│${UI_NC}"
+    echo -e "${UI_CYAN}│${UI_NC} ${UI_WHITE}🛠️  SUPPORT${UI_NC}"
+    echo -e "${UI_CYAN}│${UI_NC}   A️  📋 Thông tin hệ thống"
+    echo -e "${UI_CYAN}│${UI_NC}   B️  🔧 Cấu hình"
+    echo -e "${UI_CYAN}│${UI_NC}   C️  📚 Trợ giúp & tài liệu"
+    echo -e "${UI_CYAN}│${UI_NC}   D️  🧪 Chế độ debug"
+    echo -e "${UI_CYAN}│${UI_NC}"
+    echo -e "${UI_CYAN}│${UI_NC}   0️⃣  ❌ Thoát"
+    echo -e "${UI_CYAN}╰──────────────────────────────────────────────────────────╯${UI_NC}"
     echo ""
-    echo -e "${LOG_WHITE}CHỨC NĂNG CHÍNH:${LOG_NC}"
-    echo -e "1️⃣  🚀 Cài đặt N8N"
-    echo -e "2️⃣  🌐 Quản lý tên miền & SSL"
-    echo -e "3️⃣  ⚙️  Quản lý dịch vụ"
-    echo -e "4️⃣  💾 Sao lưu & khôi phục"
-    echo -e "5️⃣  🔄 Cập nhật phiên bản"
-    echo -e "6️⃣  🗄️  Quản lý Database"
-    echo -e "7️⃣  🔄 Workflow Manager"
-    echo ""
-    echo -e "${LOG_WHITE}HỖ TRỢ:${LOG_NC}"
-    echo -e "A️  📋 Thông tin hệ thống"
-    echo -e "B️  🔧 Cấu hình"
-    echo -e "C️  📚 Trợ giúp & tài liệu"
-    echo -e "D️  🧪 Chế độ debug"
-    echo ""
-    echo -e "0️⃣  ❌ Thoát"
-    echo ""
-    echo -e "${LOG_CYAN}───────────────────────────────────────────────────────────${LOG_NC}"
 }
 
 # Xử lý lựa chọn menu
@@ -502,7 +588,7 @@ show_help() {
     echo "  • Website: https://dataonline.vn"
     echo "  • Tài liệu: https://docs.dataonline.vn/n8n-manager"
     echo "  • Hỗ trợ: support@dataonline.vn"
-    echo "  • GitHub: https://github.com/dataonline-vn/n8n-manager"
+    echo "  • GitHub: https://github.com/vanntpt/n8n-autodeploy"
     echo ""
     echo "Phím tắt:"
     echo "  • Ctrl+C: Thoát khẩn cấp"

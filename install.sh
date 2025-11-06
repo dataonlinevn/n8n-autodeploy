@@ -12,9 +12,9 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Configuration
-REPO_URL="https://github.com/HungNM1486/DataOnline_N8N_Manager.git"
-INSTALL_DIR="/opt/datalonline-n8n-manager"
-BINARY_PATH="/usr/local/bin/datalonline-n8n-manager"
+REPO_URL="https://github.com/vanntpt/n8n-autodeploy"
+INSTALL_DIR="/opt/dataonline-n8n-manager"
+BINARY_PATH="/usr/local/bin/dataonline-n8n-manager"
 
 # Logging functions
 log_info() {
@@ -39,8 +39,8 @@ show_header() {
     cat << 'EOF'
 ╭──────────────────────────────────────────────────────────╮
 │                DataOnline N8N Manager                    │
-│                   Version 1.0.0                         │
-│               https://datalonline.vn                     │
+│                   Version 1.0.0                          │ 
+│               https://dataonline.vn                     │
 ╰──────────────────────────────────────────────────────────╯
 EOF
     echo -e "${NC}"
@@ -108,7 +108,7 @@ complete_setup() {
     log_success "Installation completed successfully!"
     echo ""
     echo -e "${GREEN}Quick Start:${NC}"
-    echo -e "  ${BLUE}datalonline-n8n-manager${NC}     # Start manager"
+    echo -e "  ${BLUE}dataonline-n8n-manager${NC}     # Start manager"
     echo -e "  ${BLUE}$INSTALL_DIR/scripts/manager.sh${NC}  # Alternative command"
     echo ""
     echo -e "${GREEN}Next Steps:${NC}"
@@ -122,7 +122,7 @@ complete_setup() {
     echo "  • Troubleshooting: $INSTALL_DIR/TROUBLESHOOTING.md"
     echo ""
     echo -e "${GREEN}Support:${NC}"
-    echo "  • GitHub: https://github.com/dataonline-vn/n8n-manager"
+    echo "  • GitHub: https://github.com/vanntpt/n8n-autodeploy"
     echo "  • Email: support@dataonline.vn"
     echo ""
 }
@@ -152,10 +152,3 @@ main() {
 
 # Run main function
 main "$@"
-EOF
-
-# Make executable
-chmod +x install.sh
-
-# Test installation script
-./install.sh --help 2>/dev/null || echo "Install script created"

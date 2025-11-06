@@ -13,48 +13,18 @@ PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$PLUGIN_DIR")")"
 [[ -z "${LOGGER_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/logger.sh"
 [[ -z "${CONFIG_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/config.sh"
 [[ -z "${UTILS_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/utils.sh"
+[[ -z "${UI_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/ui.sh"
+
+# Load backup sub-modules
+PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$PLUGIN_DIR/backup-utils.sh"
+source "$PLUGIN_DIR/backup-gdrive.sh"
+source "$PLUGIN_DIR/backup-scheduler.sh"
 
 # Constants
 readonly BACKUP_BASE_DIR="/opt/n8n/backups"
 readonly RCLONE_CONFIG="$HOME/.config/rclone/rclone.conf"
 readonly CRON_JOB_NAME="n8n-backup"
-
-# ===== HELPER FUNCTIONS FOR REMOTE DETECTION =====
-
-# Get Google Drive remote name
-get_gdrive_remote_name() {
-    if [[ ! -f "$RCLONE_CONFIG" ]]; then
-        return 1
-    fi
-    
-    # Find Google Drive remote (type = drive)
-    local remote_name=$(rclone listremotes | grep -E "^.*:$" | while read -r line; do
-        local name="${line%:}"
-        local type=$(rclone config show "$name" | grep "type = " | cut -d' ' -f3)
-        if [[ "$type" == "drive" ]]; then
-            echo "$name"
-            break
-        fi
-    done)
-    
-    if [[ -n "$remote_name" ]]; then
-        echo "$remote_name"
-        return 0
-    else
-        return 1
-    fi
-}
-
-# Save remote name to config
-save_gdrive_remote_name() {
-    local remote_name="$1"
-    config_set "backup.gdrive_remote" "$remote_name"
-}
-
-# Get saved remote name from config
-get_saved_gdrive_remote_name() {
-    config_get "backup.gdrive_remote" ""
-}
 
 # ===== BACKUP FUNCTIONS =====
 
@@ -164,7 +134,7 @@ create_backup() {
         fi
         
         # 3e. Backup Nginx SSL config cho NocoDB subdomain (nếu có)
-        local nocodb_domain=$(grep "nocodb.domain" "$HOME/.config/datalonline-n8n/settings.conf" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || echo "")
+        local nocodb_domain=$(grep "nocodb.domain" "$HOME/.config/dataonline-n8n/settings.conf" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || echo "")
         if [[ -n "$nocodb_domain" ]] && [[ -f "/etc/nginx/sites-available/${nocodb_domain}.conf" ]]; then
             mkdir -p "$backup_dir/nginx-configs"
             sudo cp "/etc/nginx/sites-available/${nocodb_domain}.conf" "$backup_dir/nginx-configs/" 2>/dev/null || true
@@ -189,9 +159,9 @@ create_backup() {
     fi
     
     # Backup manager config
-    if [[ -f "$HOME/.config/datalonline-n8n/settings.conf" ]]; then
+    if [[ -f "$HOME/.config/dataonline-n8n/settings.conf" ]]; then
         mkdir -p "$backup_dir/manager-config"
-        cp "$HOME/.config/datalonline-n8n/settings.conf" "$backup_dir/manager-config/" 2>/dev/null || true
+        cp "$HOME/.config/dataonline-n8n/settings.conf" "$backup_dir/manager-config/" 2>/dev/null || true
         log_success "✅ Manager config backup thành công" >&2
     fi
 
@@ -251,33 +221,6 @@ EOF
 
     # Chỉ echo đường dẫn file, không có log messages
     echo "$BACKUP_BASE_DIR/${backup_name}.tar.gz"
-}
-
-# Upload backup lên Google Drive 
-upload_to_gdrive() {
-    local backup_file="$1"
-    
-    if [[ ! -f "$RCLONE_CONFIG" ]]; then
-        log_error "❌ Chưa cấu hình Google Drive"
-        return 1
-    fi
-
-    # Auto-detect remote name
-    local remote_name
-    if ! remote_name=$(get_gdrive_remote_name); then
-        log_error "❌ Không tìm thấy Google Drive remote"
-        return 1
-    fi
-
-    log_info "☁️ Đang upload lên Google Drive (remote: $remote_name)..."
-
-    if rclone copy "$backup_file" "${remote_name}:n8n-backups/" --progress; then
-        log_success "✅ Upload thành công"
-        return 0
-    else
-        log_error "❌ Upload thất bại"
-        return 1
-    fi
 }
 
 # Cleanup backup cũ 
@@ -467,144 +410,6 @@ restore_backup() {
         return 0
     else
         log_error "❌ N8N không khởi động sau restore"
-        return 1
-    fi
-}
-
-# ===== CRON JOB MANAGEMENT =====
-
-# Cài đặt cron job 
-setup_cron_job() {
-    local frequency="$1" # daily, weekly, monthly
-    local hour="${2:-2}" # Default 2 AM
-
-    log_info "⏰ Cài đặt backup tự động..."
-
-    # Tạo script wrapper
-    local cron_script="/usr/local/bin/n8n-backup-cron.sh"
-
-    # Create script content
-    cat > /tmp/n8n-backup-cron.sh << EOF
-#!/bin/bash
-# N8N Backup Cron Script
-export PATH="/usr/local/bin:/usr/bin:/bin"
-
-# Đường dẫn tới thư mục backup và plugin
-BACKUP_DIR="/opt/n8n/backups"
-PLUGIN_DIR="$PLUGIN_DIR"
-PROJECT_ROOT="$PLUGIN_PROJECT_ROOT"
-
-# Source backup plugin trực tiếp
-source "\$PROJECT_ROOT/src/core/logger.sh"
-source "\$PROJECT_ROOT/src/core/config.sh"
-source "\$PROJECT_ROOT/src/core/utils.sh"
-source "\$PLUGIN_DIR/main.sh"
-
-# Tạo backup
-log_info "Starting automated backup..."
-backup_file=\$(create_backup)
-
-# Upload to Google Drive if configured
-if [[ -f "\$HOME/.config/rclone/rclone.conf" ]] && [[ -n "\$backup_file" ]]; then
-    upload_to_gdrive "\$backup_file"
-fi
-
-# Cleanup old backups
-cleanup_old_backups
-EOF
-
-    # Install script with proper permissions
-    if sudo cp /tmp/n8n-backup-cron.sh "$cron_script" 2>/dev/null && sudo chmod +x "$cron_script" 2>/dev/null; then
-        rm -f /tmp/n8n-backup-cron.sh
-        log_success "✅ Cron script đã được tạo"
-    else
-        log_error "Không thể tạo cron script"
-        return 1
-    fi
-
-    # Set cron schedule
-    local cron_schedule
-    case "$frequency" in
-    "daily") cron_schedule="0 $hour * * *" ;;
-    "weekly") cron_schedule="0 $hour * * 0" ;;
-    "monthly") cron_schedule="0 $hour 1 * *" ;;
-    *) cron_schedule="0 2 1 * *" ;; # Default monthly
-    esac
-
-    # Add to crontab
-    (
-        crontab -l 2>/dev/null | grep -v "$CRON_JOB_NAME"
-        echo "$cron_schedule $cron_script # $CRON_JOB_NAME"
-    ) | crontab -
-
-    log_success "✅ Đã cài đặt backup $frequency lúc $hour:00"
-    return 0
-}
-
-# ===== GOOGLE DRIVE SETUP =====
-
-# Cấu hình Google Drive
-setup_google_drive() {
-    log_info "☁️ CẤU HÌNH GOOGLE DRIVE BACKUP"
-    echo ""
-
-    # Cài đặt rclone nếu chưa có
-    if ! command_exists rclone; then
-        log_info "📦 Cài đặt rclone..."
-        curl https://rclone.org/install.sh | sudo bash
-    fi
-
-    # Kiểm tra cấu hình hiện tại
-    local existing_remote=""
-    if [[ -f "$RCLONE_CONFIG" ]]; then
-        existing_remote=$(get_gdrive_remote_name || echo "")
-    fi
-
-    if [[ -n "$existing_remote" ]]; then
-        log_info "✅ Google Drive đã được cấu hình (remote: $existing_remote)"
-        read -p "Bạn muốn cấu hình lại? [y/N]: " reconfigure
-        if [[ ! "$reconfigure" =~ ^[Yy]$ ]]; then
-            # Save existing remote name
-            save_gdrive_remote_name "$existing_remote"
-            return 0
-        fi
-    fi
-
-    log_info "🔧 Bắt đầu cấu hình Google Drive với rclone..."
-    echo "💡 Rclone sẽ hướng dẫn bạn từng bước để kết nối Google Drive"
-    echo "💡 Bạn có thể đặt tên remote bất kỳ (VD: gdrive, n8n, backup, ...)"
-    echo ""
-
-    # Chạy rclone config
-    rclone config
-
-    # Auto-detect remote name after configuration
-    log_info "🔍 Đang tự động nhận diện remote Google Drive..."
-    
-    local remote_name
-    if remote_name=$(get_gdrive_remote_name); then
-        log_success "✅ Đã nhận diện remote: $remote_name"
-        save_gdrive_remote_name "$remote_name"
-    else
-        log_error "❌ Không tìm thấy remote Google Drive"
-        return 1
-    fi
-
-    # Test connection
-    log_info "🧪 Kiểm tra kết nối với remote '$remote_name'..."
-    if rclone lsd "${remote_name}:" >/dev/null 2>&1; then
-        log_success "✅ Kết nối Google Drive thành công!"
-
-        # Tạo thư mục backup
-        log_info "📁 Tạo thư mục n8n-backups..."
-        if rclone mkdir "${remote_name}:n8n-backups" 2>/dev/null || rclone lsd "${remote_name}:n8n-backups" >/dev/null 2>&1; then
-            log_success "✅ Thư mục n8n-backups đã sẵn sàng trên Google Drive"
-        else
-            log_error "❌ Không thể tạo thư mục backup"
-            return 1
-        fi
-    else
-        log_error "❌ Không thể kết nối Google Drive với remote '$remote_name'"
         return 1
     fi
 }

@@ -11,8 +11,8 @@ if [[ -z "${LOGGER_LOADED:-}" ]]; then
     source "$SCRIPT_DIR/logger.sh"
 fi
 
-readonly DEFAULT_CONFIG_DIR="/etc/datalonline-n8n"
-readonly USER_CONFIG_DIR="$HOME/.config/datalonline-n8n"
+readonly DEFAULT_CONFIG_DIR="/etc/dataonline-n8n"
+readonly USER_CONFIG_DIR="$HOME/.config/dataonline-n8n"
 readonly PROJECT_CONFIG_DIR="$(dirname "$SCRIPT_DIR")/config"
 
 CONFIG_DIR=""
@@ -24,7 +24,7 @@ declare -A DEFAULT_CONFIG=(
     ["app.version"]="1.0.0"
     ["app.debug"]="false"
     ["logging.level"]="info"
-    ["logging.file"]="/var/log/datalonline-manager.log"
+    ["logging.file"]="/var/log/dataonline-manager.log"
     ["n8n.port"]="5678"
     ["n8n.host"]="localhost"
     ["n8n.protocol"]="http"
@@ -89,7 +89,7 @@ debug=false
 
 [logging]
 level=info
-file=/var/log/datalonline-manager.log
+file=/var/log/dataonline-manager.log
 
 [n8n]
 port=5678
