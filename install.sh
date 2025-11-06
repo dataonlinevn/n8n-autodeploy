@@ -95,7 +95,7 @@ install_manager() {
     
     # Set permissions
     sudo chmod +x "$INSTALL_DIR/scripts/manager.sh"
-    sudo chmod +x "$INSTALL_DIR/src"/**/*.sh 2>/dev/null || true
+    sudo find "$INSTALL_DIR/src" -type f -name '*.sh' -exec chmod +x {} +
     
     # Create global command
     sudo ln -sf "$INSTALL_DIR/scripts/manager.sh" "$BINARY_PATH"
