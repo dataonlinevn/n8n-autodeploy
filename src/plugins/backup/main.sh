@@ -134,7 +134,7 @@ create_backup() {
         fi
         
         # 3e. Backup Nginx SSL config cho NocoDB subdomain (nếu có)
-        local nocodb_domain=$(grep "nocodb.domain" "$HOME/.config/datalonline-n8n/settings.conf" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || echo "")
+        local nocodb_domain=$(grep "nocodb.domain" "$HOME/.config/dataonline-n8n/settings.conf" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || echo "")
         if [[ -n "$nocodb_domain" ]] && [[ -f "/etc/nginx/sites-available/${nocodb_domain}.conf" ]]; then
             mkdir -p "$backup_dir/nginx-configs"
             sudo cp "/etc/nginx/sites-available/${nocodb_domain}.conf" "$backup_dir/nginx-configs/" 2>/dev/null || true
@@ -159,9 +159,9 @@ create_backup() {
     fi
     
     # Backup manager config
-    if [[ -f "$HOME/.config/datalonline-n8n/settings.conf" ]]; then
+    if [[ -f "$HOME/.config/dataonline-n8n/settings.conf" ]]; then
         mkdir -p "$backup_dir/manager-config"
-        cp "$HOME/.config/datalonline-n8n/settings.conf" "$backup_dir/manager-config/" 2>/dev/null || true
+        cp "$HOME/.config/dataonline-n8n/settings.conf" "$backup_dir/manager-config/" 2>/dev/null || true
         log_success "✅ Manager config backup thành công" >&2
     fi
 

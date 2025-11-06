@@ -112,7 +112,7 @@ show_main_menu() {
     echo -e "${UI_CYAN}╭──────────────────────────────────────────────────────────╮${UI_NC}"
     echo -e "${UI_CYAN}│                $APP_NAME                    │${UI_NC}"
     echo -e "${UI_CYAN}│              Phiên bản: v$APP_VERSION                 │${UI_NC}"
-    echo -e "${UI_CYAN}│                https://datalonline.vn                    │${UI_NC}"
+    echo -e "${UI_CYAN}│                https://dataonline.vn                    │${UI_NC}"
     echo -e "${UI_CYAN}├──────────────────────────────────────────────────────────┤${UI_NC}"
     
     # Quick Status Panel
@@ -588,7 +588,7 @@ show_help() {
     echo "  • Website: https://dataonline.vn"
     echo "  • Tài liệu: https://docs.dataonline.vn/n8n-manager"
     echo "  • Hỗ trợ: support@dataonline.vn"
-    echo "  • GitHub: https://github.com/dataonline-vn/n8n-manager"
+    echo "  • GitHub: https://github.com/vanntpt/n8n-autodeploy"
     echo ""
     echo "Phím tắt:"
     echo "  • Ctrl+C: Thoát khẩn cấp"
