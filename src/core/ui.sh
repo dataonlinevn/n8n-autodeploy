@@ -99,6 +99,86 @@ ui_show_progress() {
     echo -e "\r${UI_CYAN}[$bar] ${percentage}% ${message}${UI_NC}"
 }
 
+# Multi-step progress tracker
+# Usage: 
+#   ui_progress_start "title" total_steps
+#   ui_progress_update step_number "step_name" "status"
+#   ui_progress_end
+UI_PROGRESS_TOTAL=0
+UI_PROGRESS_TITLE=""
+declare -a UI_PROGRESS_STEPS=()
+declare -a UI_PROGRESS_STATUS=()
+
+ui_progress_start() {
+    local title="$1"
+    local total="$2"
+    
+    UI_PROGRESS_TITLE="$title"
+    UI_PROGRESS_TOTAL="$total"
+    UI_PROGRESS_STEPS=()
+    UI_PROGRESS_STATUS=()
+    
+    echo ""
+    echo -e "${UI_CYAN}╭─────────────────────────────────────────╮${UI_NC}"
+    echo -e "${UI_CYAN}│  $title${UI_NC}"
+    echo -e "${UI_CYAN}├─────────────────────────────────────────┤${UI_NC}"
+}
+
+ui_progress_update() {
+    local step="$1"
+    local step_name="$2"
+    local status="${3:-pending}"  # pending, running, success, error
+    
+    UI_PROGRESS_STEPS[$step]="$step_name"
+    UI_PROGRESS_STATUS[$step]="$status"
+    
+    local percentage=$((step * 100 / UI_PROGRESS_TOTAL))
+    local bar_width=30
+    local filled=$((step * bar_width / UI_PROGRESS_TOTAL))
+    local empty=$((bar_width - filled))
+    
+    local bar=""
+    for ((i=0; i<filled; i++)); do bar+="█"; done
+    for ((i=0; i<empty; i++)); do bar+="░"; done
+    
+    # Clear previous progress line
+    echo -ne "\r\033[K"
+    
+    # Show progress bar
+    echo -e "${UI_CYAN}│  [${bar}] ${percentage}% (${step}/${UI_PROGRESS_TOTAL})${UI_NC}"
+    
+    # Show step status
+    local icon="⏳"
+    local color="$UI_GRAY"
+    case "$status" in
+        "success")
+            icon="✅"
+            color="$UI_GREEN"
+            ;;
+        "error")
+            icon="❌"
+            color="$UI_RED"
+            ;;
+        "running")
+            icon="🔄"
+            color="$UI_CYAN"
+            ;;
+    esac
+    
+    echo -e "${color}│  ${icon} Step ${step}: $step_name${UI_NC}"
+}
+
+ui_progress_end() {
+    echo -e "${UI_CYAN}╰─────────────────────────────────────────╯${UI_NC}"
+    echo ""
+    
+    # Reset
+    UI_PROGRESS_TOTAL=0
+    UI_PROGRESS_TITLE=""
+    UI_PROGRESS_STEPS=()
+    UI_PROGRESS_STATUS=()
+}
+
 # ===== INTERACTIVE PROMPTS =====
 
 # Enhanced prompt with validation
@@ -195,38 +275,99 @@ ui_select() {
     done
 }
 
-# ===== STATUS DISPLAY =====
+# ===== UNIFIED UI SYSTEM =====
+# Unified UI functions that replace both ui_status() and log_* functions
+# These functions automatically log to file if logger is available
 
-# Show status with icon
+# Unified info message
+ui_info() {
+    local message="$1"
+    local silent="${2:-false}"
+    
+    echo -e "${UI_BLUE}${UI_INFO} $message${UI_NC}"
+    
+    # Auto-log if logger available
+    if [[ "${LOGGER_LOADED:-}" == "true" ]] && [[ "$silent" != "true" ]]; then
+        log_info "$message" 2>/dev/null || true
+    fi
+}
+
+# Unified success message
+ui_success() {
+    local message="$1"
+    local silent="${2:-false}"
+    
+    echo -e "${UI_GREEN}${UI_CHECK} $message${UI_NC}"
+    
+    # Auto-log if logger available
+    if [[ "${LOGGER_LOADED:-}" == "true" ]] && [[ "$silent" != "true" ]]; then
+        log_success "$message" 2>/dev/null || true
+    fi
+}
+
+# Unified error message
+ui_error() {
+    local message="$1"
+    local error_code="${2:-}"
+    local suggestions="${3:-}"
+    local silent="${4:-false}"
+    
+    echo -e "${UI_RED}${UI_CROSS} $message${UI_NC}" >&2
+    
+    # Show error code if provided
+    if [[ -n "$error_code" ]]; then
+        echo -e "${UI_GRAY}   Code: $error_code${UI_NC}" >&2
+    fi
+    
+    # Show suggestions if provided
+    if [[ -n "$suggestions" ]]; then
+        echo -e "${UI_YELLOW}   💡 $suggestions${UI_NC}" >&2
+    fi
+    
+    # Auto-log if logger available
+    if [[ "${LOGGER_LOADED:-}" == "true" ]] && [[ "$silent" != "true" ]]; then
+        log_error "$message" 2>/dev/null || true
+    fi
+}
+
+# Unified warning message
+ui_warning() {
+    local message="$1"
+    local silent="${2:-false}"
+    
+    echo -e "${UI_YELLOW}${UI_WARNING} $message${UI_NC}" >&2
+    
+    # Auto-log if logger available
+    if [[ "${LOGGER_LOADED:-}" == "true" ]] && [[ "$silent" != "true" ]]; then
+        log_warn "$message" 2>/dev/null || true
+    fi
+}
+
+# ===== STATUS DISPLAY (Backward Compatibility) =====
+
+# Show status with icon (kept for backward compatibility)
 ui_status() {
     local status="$1"
     local message="$2"
-    local icon color
     
+    # Map to unified functions
     case "$status" in
         "success"|"ok")
-            icon="$UI_CHECK"
-            color="$UI_GREEN"
+            ui_success "$message" "true"
             ;;
         "error"|"fail")
-            icon="$UI_CROSS"
-            color="$UI_RED"
+            ui_error "$message" "" "" "true"
             ;;
         "warning"|"warn")
-            icon="$UI_WARNING"
-            color="$UI_YELLOW"
+            ui_warning "$message" "true"
             ;;
         "info")
-            icon="$UI_INFO"
-            color="$UI_BLUE"
+            ui_info "$message" "true"
             ;;
         *)
-            icon="•"
-            color="$UI_WHITE"
+            echo -e "${UI_WHITE}• $message${UI_NC}"
             ;;
     esac
-    
-    echo -e "${color}${icon} $message${UI_NC}"
 }
 
 # ===== COMMAND EXECUTION WITH UI =====
@@ -318,6 +459,32 @@ ui_warning_box() {
     echo -e "${UI_YELLOW}└$(printf '─%.0s' $(seq 1 $((${#title}+5))))┘${UI_NC}"
 }
 
+# Display error box with suggestions
+ui_error_box() {
+    local title="$1"
+    local error_code="${2:-}"
+    local error_message="$3"
+    shift 3
+    local suggestions=("$@")
+    
+    echo -e "${UI_RED}┌─ ${UI_CROSS} $title ─┐${UI_NC}"
+    echo -e "${UI_RED}│${UI_NC} $error_message"
+    
+    if [[ -n "$error_code" ]]; then
+        echo -e "${UI_RED}│${UI_NC} ${UI_GRAY}Code: $error_code${UI_NC}"
+    fi
+    
+    if [[ ${#suggestions[@]} -gt 0 ]]; then
+        echo -e "${UI_RED}│${UI_NC}"
+        echo -e "${UI_RED}│${UI_NC} ${UI_YELLOW}💡 Suggestions:${UI_NC}"
+        for suggestion in "${suggestions[@]}"; do
+            echo -e "${UI_RED}│${UI_NC}   • $suggestion"
+        done
+    fi
+    
+    echo -e "${UI_RED}└$(printf '─%.0s' $(seq 1 $((${#title}+5))))┘${UI_NC}"
+}
+
 # ===== VALIDATION HELPERS =====
 
 # Validate domain format
@@ -355,6 +522,92 @@ ui_validate_port() {
     fi
 }
 
+# ===== TABLE FORMATTING =====
+
+# Print table with headers and rows
+# Usage: ui_table "Header1|Header2|Header3" "Row1Col1|Row1Col2|Row1Col3" "Row2Col1|Row2Col2|Row2Col3"
+ui_table() {
+    local headers="$1"
+    shift
+    local rows=("$@")
+    
+    # Parse headers
+    IFS='|' read -ra HEADER_ARRAY <<< "$headers"
+    local col_count=${#HEADER_ARRAY[@]}
+    
+    # Calculate column widths
+    declare -a col_widths
+    for i in "${!HEADER_ARRAY[@]}"; do
+        col_widths[$i]=${#HEADER_ARRAY[$i]}
+    done
+    
+    # Check rows for max widths
+    for row in "${rows[@]}"; do
+        IFS='|' read -ra ROW_ARRAY <<< "$row"
+        for i in "${!ROW_ARRAY[@]}"; do
+            if [[ ${#ROW_ARRAY[$i]} -gt ${col_widths[$i]} ]]; then
+                col_widths[$i]=${#ROW_ARRAY[$i]}
+            fi
+        done
+    done
+    
+    # Add padding
+    for i in "${!col_widths[@]}"; do
+        col_widths[$i]=$((col_widths[$i] + 2))
+    done
+    
+    # Print header
+    local header_line="┌"
+    for i in "${!col_widths[@]}"; do
+        header_line+=$(printf '─%.0s' $(seq 1 ${col_widths[$i]}))
+        if [[ $i -lt $((${#col_widths[@]} - 1)) ]]; then
+            header_line+="┬"
+        fi
+    done
+    header_line+="┐"
+    echo -e "${UI_CYAN}$header_line${UI_NC}"
+    
+    # Print header row
+    echo -ne "${UI_CYAN}│${UI_NC}"
+    for i in "${!HEADER_ARRAY[@]}"; do
+        printf " %-${col_widths[$i]}s${UI_CYAN}│${UI_NC}" "${HEADER_ARRAY[$i]}"
+    done
+    echo ""
+    
+    # Print separator
+    local sep_line="├"
+    for i in "${!col_widths[@]}"; do
+        sep_line+=$(printf '─%.0s' $(seq 1 ${col_widths[$i]}))
+        if [[ $i -lt $((${#col_widths[@]} - 1)) ]]; then
+            sep_line+="┼"
+        fi
+    done
+    sep_line+="┤"
+    echo -e "${UI_CYAN}$sep_line${UI_NC}"
+    
+    # Print data rows
+    for row in "${rows[@]}"; do
+        IFS='|' read -ra ROW_ARRAY <<< "$row"
+        echo -ne "${UI_WHITE}│${UI_NC}"
+        for i in "${!ROW_ARRAY[@]}"; do
+            local cell_value="${ROW_ARRAY[$i]:-}"
+            printf " %-${col_widths[$i]}s${UI_WHITE}│${UI_NC}" "$cell_value"
+        done
+        echo ""
+    done
+    
+    # Print footer
+    local footer_line="└"
+    for i in "${!col_widths[@]}"; do
+        footer_line+=$(printf '─%.0s' $(seq 1 ${col_widths[$i]}))
+        if [[ $i -lt $((${#col_widths[@]} - 1)) ]]; then
+            footer_line+="┴"
+        fi
+    done
+    footer_line+="┘"
+    echo -e "${UI_CYAN}$footer_line${UI_NC}"
+}
+
 # ===== CLEANUP ON EXIT =====
 
 # Cleanup function
@@ -367,6 +620,8 @@ ui_cleanup() {
 trap ui_cleanup EXIT
 
 # Export functions
-export -f ui_start_spinner ui_stop_spinner ui_prompt ui_confirm ui_select ui_status ui_run_command
-export -f ui_header ui_section ui_info_box ui_warning_box
-export -f ui_validate_domain ui_validate_email ui_validate_port
+export -f ui_start_spinner ui_stop_spinner ui_prompt ui_confirm ui_select ui_run_command
+export -f ui_info ui_success ui_error ui_warning ui_status
+export -f ui_progress_start ui_progress_update ui_progress_end ui_show_progress
+export -f ui_header ui_section ui_info_box ui_warning_box ui_error_box
+export -f ui_validate_domain ui_validate_email ui_validate_port ui_table

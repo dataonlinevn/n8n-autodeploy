@@ -39,7 +39,7 @@ show_header() {
     cat << 'EOF'
 ╭──────────────────────────────────────────────────────────╮
 │                DataOnline N8N Manager                    │
-│                   Version 1.0.0                         │
+│                   Version 1.0.0                          │ 
 │               https://datalonline.vn                     │
 ╰──────────────────────────────────────────────────────────╯
 EOF
@@ -152,10 +152,3 @@ main() {
 
 # Run main function
 main "$@"
-EOF
-
-# Make executable
-chmod +x install.sh
-
-# Test installation script
-./install.sh --help 2>/dev/null || echo "Install script created"

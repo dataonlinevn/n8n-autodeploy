@@ -19,7 +19,11 @@ PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$PLUGIN_DIR")")"
 
 # Load sub-modules
 source "$PLUGIN_DIR/nocodb-setup.sh"
-source "$PLUGIN_DIR/nocodb-management.sh"
+source "$PLUGIN_DIR/nocodb-users.sh"
+source "$PLUGIN_DIR/nocodb-monitoring.sh"
+source "$PLUGIN_DIR/nocodb-maintenance.sh"
+source "$PLUGIN_DIR/nocodb-testing.sh"
+source "$PLUGIN_DIR/nocodb-integration.sh"
 
 # Constants
 readonly DATABASE_MANAGER_LOADED=true
@@ -35,7 +39,7 @@ database_manager_main() {
     while true; do
         show_database_manager_menu
         
-        echo -n -e "${UI_WHITE}Chọn [0-8]: ${UI_NC}"
+        echo -n -e "${UI_WHITE}Chọn [0-9]: ${UI_NC}"
         read -r choice
 
         case "$choice" in
@@ -43,9 +47,13 @@ database_manager_main() {
         2) install_nocodb ;;
         3) open_nocodb_interface ;;
         4) setup_nocodb_ssl ;; 
-        5) uninstall_nocodb ;;
+        5) manage_nocodb_users ;;
+        6) monitor_nocodb_performance ;;
+        7) troubleshoot_nocodb ;;
+        8) run_maintenance_tasks ;;
+        9) run_integration_tests ;;
         0) return 0 ;;
-        *) ui_status "error" "Lựa chọn không hợp lệ" ;;
+        *) ui_error "Lựa chọn không hợp lệ" ;;
         esac
 
         echo ""
@@ -69,12 +77,24 @@ show_database_manager_menu() {
     
     echo "🗄️  QUẢN LÝ DATABASE N8N"
     echo ""
-    echo "1) 📊 Kiểm tra trạng thái"
-    echo "2) 🚀 Cài đặt NocoDB"
-    echo "3) 🌐 Mở giao diện NocoDB"
-    echo "4) 🔒 Cài đặt SSL"
-    echo "5) 🗑️  Gỡ cài đặt NocoDB"
-    echo "0) ⬅️  Quay lại"
+    echo "📦 INSTALLATION & SETUP"
+    echo "  1) 📊 Kiểm tra trạng thái"
+    echo "  2) 🚀 Cài đặt NocoDB"
+    echo "  3) 🌐 Mở giao diện NocoDB"
+    echo "  4) 🔒 Cài đặt SSL"
+    echo ""
+    echo "👥 USER MANAGEMENT"
+    echo "  5) 👥 Quản lý Users"
+    echo ""
+    echo "📊 MONITORING & TROUBLESHOOTING"
+    echo "  6) 📊 Performance Monitoring"
+    echo "  7) 🔧 Troubleshooting"
+    echo ""
+    echo "🔧 MAINTENANCE"
+    echo "  8) 🔧 Maintenance Tasks"
+    echo "  9) 🧪 Integration Tests"
+    echo ""
+    echo "  0) ⬅️  Quay lại"
     echo ""
 }
 
@@ -120,7 +140,7 @@ check_nocodb_status() {
             echo "Status: $(docker inspect $container_id --format '{{.State.Status}}')"
         fi
     else
-        ui_status "error" "Container NocoDB không chạy"
+        ui_error "Container NocoDB không chạy" "CONTAINER_STOPPED" "Chạy: docker compose up -d nocodb"
     fi
     
     # Check API health
@@ -128,10 +148,10 @@ check_nocodb_status() {
     ui_start_spinner "Kiểm tra API health"
     if curl -s "http://localhost:${NOCODB_PORT}/api/v1/health" >/dev/null 2>&1; then
         ui_stop_spinner
-        ui_status "success" "NocoDB API phản hồi"
+        ui_success "NocoDB API phản hồi"
     else
         ui_stop_spinner
-        ui_status "error" "NocoDB API không phản hồi"
+        ui_error "NocoDB API không phản hồi" "API_FAILED" "Kiểm tra: docker logs n8n-nocodb"
     fi
     
     # Check database connection
@@ -139,10 +159,10 @@ check_nocodb_status() {
     ui_start_spinner "Kiểm tra kết nối database"
     if test_nocodb_database_connection; then
         ui_stop_spinner
-        ui_status "success" "Kết nối database OK"
+        ui_success "Kết nối database OK"
     else
         ui_stop_spinner
-        ui_status "error" "Kết nối database thất bại"
+        ui_error "Kết nối database thất bại" "DB_CONNECTION_FAILED" "Kiểm tra PostgreSQL container"
     fi
     
     # Show URLs
@@ -168,7 +188,7 @@ open_nocodb_interface() {
     local nocodb_status=$(get_nocodb_status)
     
     if [[ "$nocodb_status" == *"🔴"* ]]; then
-        ui_status "error" "NocoDB chưa được cài đặt hoặc không hoạt động"
+        ui_error "NocoDB chưa được cài đặt hoặc không hoạt động" "NOCODB_NOT_RUNNING" "Cài đặt NocoDB trước"
         echo -n -e "${UI_YELLOW}Bạn có muốn cài đặt NocoDB ngay? [Y/n]: ${UI_NC}"
         read -r install_now
         if [[ ! "$install_now" =~ ^[Nn]$ ]]; then
@@ -229,7 +249,7 @@ install_nocodb() {
     
     # Check prerequisites
     if ! check_nocodb_prerequisites; then
-        ui_status "error" "Yêu cầu hệ thống chưa đáp ứng"
+        ui_error "Yêu cầu hệ thống chưa đáp ứng" "PREREQUISITES_FAILED" "Xem chi tiết ở trên"
         return 1
     fi
     
@@ -245,14 +265,14 @@ install_nocodb() {
     
     # Run installation
     if setup_nocodb_integration; then
-        ui_status "success" "🎉 NocoDB đã được cài đặt thành công!"
+        ui_success "🎉 NocoDB đã được cài đặt thành công!"
         
         ui_info_box "Bước tiếp theo" \
             "1. Truy cập giao diện (option 3)" \
             "2. Tạo connection tới N8N database" \
             "3. Tạo views và dashboards theo nhu cầu"
     else
-        ui_status "error" "Cài đặt NocoDB thất bại"
+        ui_error "Cài đặt NocoDB thất bại" "INSTALL_FAILED" "Kiểm tra logs: docker compose logs nocodb"
         return 1
     fi
 }
@@ -264,43 +284,43 @@ check_nocodb_prerequisites() {
     
     # Check N8N installation
     if [[ ! -f "$N8N_COMPOSE_DIR/docker-compose.yml" ]]; then
-        ui_status "error" "N8N chưa được cài đặt"
+        ui_error "N8N chưa được cài đặt" "N8N_NOT_INSTALLED" "Cài đặt N8N trước"
         ((errors++))
     else
-        ui_status "success" "N8N đã cài đặt"
+        ui_success "N8N đã cài đặt"
     fi
     
     # Check Docker
     if ! command_exists docker; then
-        ui_status "error" "Docker chưa cài đặt"
+        ui_error "Docker chưa cài đặt" "DOCKER_NOT_INSTALLED" "Cài đặt Docker trước"
         ((errors++))
     else
-        ui_status "success" "Docker available"
+        ui_success "Docker available"
     fi
     
     # Check port availability
     if ! is_port_available $NOCODB_PORT; then
-        ui_status "error" "Port $NOCODB_PORT đã được sử dụng"
+        ui_error "Port $NOCODB_PORT đã được sử dụng" "PORT_IN_USE" "Chọn port khác hoặc dừng service đang dùng"
         ((errors++))
     else
-        ui_status "success" "Port $NOCODB_PORT available"
+        ui_success "Port $NOCODB_PORT available"
     fi
     
     # Check PostgreSQL
     if ! docker ps --format '{{.Names}}' | grep -q "postgres"; then
-        ui_status "error" "PostgreSQL container không chạy"
+        ui_error "PostgreSQL container không chạy" "POSTGRES_NOT_RUNNING" "Khởi động N8N stack trước"
         ((errors++))
     else
-        ui_status "success" "PostgreSQL container OK"
+        ui_success "PostgreSQL container OK"
     fi
     
     # Check disk space (minimum 1GB)
     local free_space_gb=$(df -BG "$N8N_COMPOSE_DIR" | awk 'NR==2 {print $4}' | sed 's/G//')
     if [[ "$free_space_gb" -lt 1 ]]; then
-        ui_status "error" "Cần ít nhất 1GB dung lượng trống"
+        ui_error "Cần ít nhất 1GB dung lượng trống (hiện tại: ${free_space_gb}GB)" "LOW_DISK_SPACE" "Dọn dẹp disk hoặc mở rộng storage"
         ((errors++))
     else
-        ui_status "success" "Dung lượng: ${free_space_gb}GB"
+        ui_success "Dung lượng: ${free_space_gb}GB"
     fi
     
     return $errors
@@ -358,7 +378,7 @@ setup_nocodb_ssl() {
     
     # Validate domain format
     if ! ui_validate_domain "$nocodb_domain"; then
-        ui_status "error" "Domain format không hợp lệ: $nocodb_domain"
+        ui_error "Domain format không hợp lệ: $nocodb_domain" "INVALID_DOMAIN" "Kiểm tra format domain"
         return 1
     fi
     
@@ -370,21 +390,21 @@ setup_nocodb_ssl() {
     ui_stop_spinner
     
     if [[ -z "$resolved_ip" ]]; then
-        ui_status "error" "Domain không thể resolve: $nocodb_domain"
+        ui_error "Domain không thể resolve: $nocodb_domain" "DNS_NOT_RESOLVED" "Kiểm tra DNS configuration"
         echo -n -e "${UI_YELLOW}Tiếp tục dù DNS chưa setup? [y/N]: ${UI_NC}"
         read -r skip_dns
         if [[ ! "$skip_dns" =~ ^[Yy]$ ]]; then
             return 1
         fi
     elif [[ "$resolved_ip" != "$server_ip" ]]; then
-        ui_status "warning" "DNS trỏ về $resolved_ip (server: $server_ip)"
+        ui_warning "DNS trỏ về $resolved_ip (server: $server_ip)"
         echo -n -e "${UI_YELLOW}Tiếp tục dù DNS không đúng? [y/N]: ${UI_NC}"
         read -r skip_dns
         if [[ ! "$skip_dns" =~ ^[Yy]$ ]]; then
             return 1
         fi
     else
-        ui_status "success" "DNS OK: $nocodb_domain → $server_ip"
+        ui_success "DNS OK: $nocodb_domain → $server_ip"
     fi
     
     # Final confirmation
@@ -407,7 +427,7 @@ setup_nocodb_ssl() {
     upgrade_to_https_config "$nocodb_domain" || return 1
     update_nocodb_ssl_config "$nocodb_domain" || return 1
     
-    ui_status "success" "SSL setup hoàn tất cho $nocodb_domain"
+    ui_success "SSL setup hoàn tất cho $nocodb_domain"
 }
 
 create_nocodb_nginx_config() {
@@ -440,7 +460,7 @@ EOF
     sudo ln -sf "$nginx_conf" /etc/nginx/sites-enabled/
     sudo nginx -t && sudo systemctl reload nginx
     ui_stop_spinner
-    ui_status "success" "HTTP config tạo thành công"
+    ui_success "HTTP config tạo thành công"
 }
 
 upgrade_to_https_config() {
@@ -478,7 +498,7 @@ EOF
 
     sudo nginx -t && sudo systemctl reload nginx
     ui_stop_spinner
-    ui_status "success" "HTTPS config hoạt động"
+    ui_success "HTTPS config hoạt động"
 }
 
 obtain_nocodb_ssl_certificate() {
@@ -491,7 +511,7 @@ obtain_nocodb_ssl_certificate() {
     
     # Test nginx config
     if ! sudo nginx -t; then
-        ui_status "error" "Nginx config có lỗi"
+        ui_error "Nginx config có lỗi" "NGINX_CONFIG_ERROR" "Kiểm tra nginx config syntax"
         return 1
     fi
     
@@ -507,10 +527,10 @@ obtain_nocodb_ssl_certificate() {
         --email "$email" \
         --non-interactive; then
         ui_stop_spinner
-        ui_status "success" "SSL certificate thành công"
+        ui_success "SSL certificate thành công"
     else
         ui_stop_spinner
-        ui_status "error" "SSL certificate thất bại"
+        ui_error "SSL certificate thất bại" "SSL_CERT_FAILED" "Kiểm tra DNS và Let's Encrypt rate limits"
         return 1
     fi
     
@@ -535,7 +555,7 @@ update_nocodb_ssl_config() {
     docker compose restart nocodb
     
     ui_stop_spinner
-    ui_status "success" "NocoDB config cập nhật thành công"
+    ui_success "NocoDB config cập nhật thành công"
 }
 
 # ===== UNINSTALL FUNCTION =====
@@ -561,9 +581,9 @@ uninstall_nocodb() {
     
     # Remove NocoDB
     if remove_nocodb_integration; then
-        ui_status "success" "NocoDB đã được gỡ bỏ hoàn toàn"
+        ui_success "NocoDB đã được gỡ bỏ hoàn toàn"
     else
-        ui_status "error" "Gỡ bỏ NocoDB thất bại"
+        ui_error "Gỡ bỏ NocoDB thất bại" "UNINSTALL_FAILED" "Kiểm tra logs và thử lại"
         return 1
     fi
 }
