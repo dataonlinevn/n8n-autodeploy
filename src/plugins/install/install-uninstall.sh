@@ -156,9 +156,17 @@ uninstall_n8n_completely() {
         rm -f "/etc/nginx/sites-available/${n8n_domain}.conf" 2>/dev/null || true
         rm -f "/etc/nginx/sites-enabled/${n8n_domain}.conf" 2>/dev/null || true
         
-        # Also remove NocoDB domain if exists
-        rm -f "/etc/nginx/sites-available/db.${n8n_domain}.conf" 2>/dev/null || true
-        rm -f "/etc/nginx/sites-enabled/db.${n8n_domain}.conf" 2>/dev/null || true
+        # Also remove NocoDB domain if exists (dựa trên config thực tế, không hardcode)
+        local nocodb_domain=$(config_get "nocodb.domain" "")
+        if [[ -n "$nocodb_domain" ]]; then
+            # Xóa file config chính xác
+            rm -f "/etc/nginx/sites-available/${nocodb_domain}.conf" 2>/dev/null || true
+            rm -f "/etc/nginx/sites-enabled/${nocodb_domain}.conf" 2>/dev/null || true
+            
+            # Tìm và xóa các file config có thể liên quan (nếu có tên khác)
+            sudo find /etc/nginx/sites-available -name "*${nocodb_domain}*.conf" -type f -delete 2>/dev/null || true
+            sudo find /etc/nginx/sites-enabled -name "*${nocodb_domain}*.conf" -type l -delete 2>/dev/null || true
+        fi
         
         # Reload nginx if running
         if systemctl is-active --quiet nginx; then

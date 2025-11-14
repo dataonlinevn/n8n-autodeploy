@@ -19,7 +19,6 @@ PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$PLUGIN_DIR")")"
 
 # Load sub-modules
 source "$PLUGIN_DIR/nocodb-setup.sh"
-source "$PLUGIN_DIR/nocodb-users.sh"
 source "$PLUGIN_DIR/nocodb-monitoring.sh"
 source "$PLUGIN_DIR/nocodb-maintenance.sh"
 source "$PLUGIN_DIR/nocodb-testing.sh"
@@ -39,7 +38,7 @@ database_manager_main() {
     while true; do
         show_database_manager_menu
         
-        echo -n -e "${UI_WHITE}Chọn [0-9]: ${UI_NC}"
+        echo -n -e "${UI_WHITE}Chọn [0-8]: ${UI_NC}"
         read -r choice
 
         case "$choice" in
@@ -47,11 +46,10 @@ database_manager_main() {
         2) install_nocodb ;;
         3) open_nocodb_interface ;;
         4) setup_nocodb_ssl ;; 
-        5) manage_nocodb_users ;;
-        6) monitor_nocodb_performance ;;
-        7) troubleshoot_nocodb ;;
-        8) run_maintenance_tasks ;;
-        9) run_integration_tests ;;
+        5) monitor_nocodb_performance ;;
+        6) troubleshoot_nocodb ;;
+        7) run_maintenance_tasks ;;
+        8) run_integration_tests ;;
         0) return 0 ;;
         *) ui_error "Lựa chọn không hợp lệ" ;;
         esac
@@ -83,16 +81,13 @@ show_database_manager_menu() {
     echo "  3) 🌐 Mở giao diện NocoDB"
     echo "  4) 🔒 Cài đặt SSL"
     echo ""
-    echo "👥 USER MANAGEMENT"
-    echo "  5) 👥 Quản lý Users"
-    echo ""
     echo "📊 MONITORING & TROUBLESHOOTING"
-    echo "  6) 📊 Performance Monitoring"
-    echo "  7) 🔧 Troubleshooting"
+    echo "  5) 📊 Performance Monitoring"
+    echo "  6) 🔧 Troubleshooting"
     echo ""
     echo "🔧 MAINTENANCE"
-    echo "  8) 🔧 Maintenance Tasks"
-    echo "  9) 🧪 Integration Tests"
+    echo "  7) 🔧 Maintenance Tasks"
+    echo "  8) 🧪 Integration Tests"
     echo ""
     echo "  0) ⬅️  Quay lại"
     echo ""
@@ -332,49 +327,107 @@ setup_nocodb_ssl() {
     ui_section "Cài đặt SSL cho NocoDB"
     
     local nocodb_domain=""
-    local main_domain=$(config_get "n8n.domain" "")
+    local nocodb_configured_domain=$(config_get "nocodb.domain" "")
+    local n8n_domain=$(config_get "n8n.domain" "")
     
-    echo "📋 **Domain Options:**"
-    echo ""
-    if [[ -n "$main_domain" ]]; then
-        echo "1) Sử dụng subdomain: db.$main_domain"
+    # Nếu đã có domain được cấu hình cho NocoDB, sử dụng nó
+    if [[ -n "$nocodb_configured_domain" ]]; then
+        ui_info "Domain đã được cấu hình cho NocoDB: $nocodb_configured_domain"
+        echo ""
+        echo -e "${UI_CYAN}📋 **Domain Options:**${UI_NC}"
+        echo ""
+        echo "1) Sử dụng domain đã cấu hình: $nocodb_configured_domain"
         echo "2) Nhập domain khác"
+        echo ""
+        read -p "Chọn [1-2]: " domain_choice
+        case "$domain_choice" in
+        1) 
+            nocodb_domain="$nocodb_configured_domain"
+            ;;
+        2)
+            echo ""
+            echo -e "${UI_CYAN}🌐 Nhập domain cho NocoDB:${UI_NC}"
+            echo -e "${UI_GRAY}   • Có thể nhập domain chính (ví dụ: example.com)${UI_NC}"
+            echo -e "${UI_GRAY}   • Hoặc subdomain (ví dụ: nocodb.example.com)${UI_NC}"
+            echo ""
+            echo -n -e "${UI_WHITE}Domain: ${UI_NC}"
+            read -r nocodb_domain
+            if [[ -z "$nocodb_domain" ]]; then
+                ui_status "error" "Domain không được để trống"
+                return 1
+            fi
+            ;;
+        *)
+            ui_status "error" "Lựa chọn không hợp lệ"
+            return 1
+            ;;
+        esac
     else
-        echo "1) Nhập domain mới"
-    fi
-    echo ""
-    
-    while true; do
+        # Extract main domain từ N8N domain (nếu là subdomain)
+        local main_domain=""
+        if [[ -n "$n8n_domain" ]]; then
+            # Nếu N8N domain là subdomain (có nhiều hơn 2 phần), extract main domain
+            local domain_parts=$(echo "$n8n_domain" | tr '.' '\n' | wc -l)
+            if [[ $domain_parts -gt 2 ]]; then
+                # Lấy phần từ vị trí thứ 2 trở đi (bỏ phần đầu)
+                main_domain=$(echo "$n8n_domain" | sed 's/^[^.]*\.//')
+            else
+                main_domain="$n8n_domain"
+            fi
+        fi
+        
+        echo "📋 **Domain Options:**"
+        echo ""
         if [[ -n "$main_domain" ]]; then
-            read -p "Chọn [1-2]: " domain_choice
-            case "$domain_choice" in
-            1) 
-                nocodb_domain="db.$main_domain"
-                break
-                ;;
-            2)
-                echo -n -e "${UI_WHITE}Nhập domain cho NocoDB: ${UI_NC}"
+            echo "1) Sử dụng subdomain: db.$main_domain"
+            echo "2) Nhập domain khác"
+        else
+            echo "1) Nhập domain mới"
+        fi
+        echo ""
+        
+        while true; do
+            if [[ -n "$main_domain" ]]; then
+                read -p "Chọn [1-2]: " domain_choice
+                case "$domain_choice" in
+                1) 
+                    nocodb_domain="db.$main_domain"
+                    break
+                    ;;
+                2)
+                    echo ""
+                    echo -e "${UI_CYAN}🌐 Nhập domain cho NocoDB:${UI_NC}"
+                    echo -e "${UI_GRAY}   • Có thể nhập domain chính (ví dụ: example.com)${UI_NC}"
+                    echo -e "${UI_GRAY}   • Hoặc subdomain (ví dụ: nocodb.example.com)${UI_NC}"
+                    echo ""
+                    echo -n -e "${UI_WHITE}Domain: ${UI_NC}"
+                    read -r nocodb_domain
+                    if [[ -n "$nocodb_domain" ]]; then
+                        break
+                    else
+                        ui_status "error" "Domain không được để trống"
+                    fi
+                    ;;
+                *)
+                    ui_status "error" "Lựa chọn không hợp lệ"
+                    ;;
+                esac
+            else
+                echo ""
+                echo -e "${UI_CYAN}🌐 Nhập domain cho NocoDB:${UI_NC}"
+                echo -e "${UI_GRAY}   • Có thể nhập domain chính (ví dụ: example.com)${UI_NC}"
+                echo -e "${UI_GRAY}   • Hoặc subdomain (ví dụ: nocodb.example.com)${UI_NC}"
+                echo ""
+                echo -n -e "${UI_WHITE}Domain: ${UI_NC}"
                 read -r nocodb_domain
                 if [[ -n "$nocodb_domain" ]]; then
                     break
                 else
                     ui_status "error" "Domain không được để trống"
                 fi
-                ;;
-            *)
-                ui_status "error" "Lựa chọn không hợp lệ"
-                ;;
-            esac
-        else
-            echo -n -e "${UI_WHITE}Nhập domain cho NocoDB: ${UI_NC}"
-            read -r nocodb_domain
-            if [[ -n "$nocodb_domain" ]]; then
-                break
-            else
-                ui_status "error" "Domain không được để trống"
             fi
-        fi
-    done
+        done
+    fi
     
     # Validate domain format
     if ! ui_validate_domain "$nocodb_domain"; then

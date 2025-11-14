@@ -285,11 +285,45 @@ check_ssl_status() {
 
     log_info "Đang kiểm tra SSL cho domain: $domain"
 
-    # Kiểm tra nginx config
-    if [[ -f "/etc/nginx/sites-available/${domain}.conf" ]]; then
-        log_success "✅ Cấu hình Nginx cho $domain đã tồn tại"
+    # Kiểm tra nginx config - tìm file config dựa trên domain thực tế
+    local nginx_config="/etc/nginx/sites-available/${domain}.conf"
+    
+    # Nếu không tìm thấy, tìm tất cả file config có chứa domain trong tên
+    if [[ ! -f "$nginx_config" ]]; then
+        local found_config
+        found_config=$(sudo find /etc/nginx/sites-available -name "*${domain}*.conf" -type f 2>/dev/null | head -1)
+        if [[ -n "$found_config" ]]; then
+            nginx_config="$found_config"
+        fi
+    fi
+    
+    if [[ -f "$nginx_config" ]]; then
+        # Kiểm tra file có trống không
+        if [[ ! -s "$nginx_config" ]]; then
+            log_warning "⚠️ File cấu hình Nginx trống: $nginx_config"
+            log_info "Đang tự động tạo lại cấu hình nginx..."
+            
+            # Tự động tạo lại nginx config
+            if auto_fix_nginx_config "$domain"; then
+                log_success "✅ Đã tạo lại cấu hình Nginx"
+            else
+                log_error "❌ Không thể tạo lại cấu hình Nginx"
+                log_info "💡 Vui lòng chạy 'Cấu hình SSL với Let's Encrypt' để tạo lại"
+            fi
+        else
+            log_success "✅ Cấu hình Nginx cho $domain đã tồn tại"
+        fi
     else
-        log_error "❌ Không tìm thấy cấu hình Nginx cho $domain"
+        log_warning "⚠️ Không tìm thấy cấu hình Nginx cho $domain"
+        log_info "Đang tự động tạo cấu hình nginx..."
+        
+        # Tự động tạo nginx config
+        if auto_fix_nginx_config "$domain"; then
+            log_success "✅ Đã tạo cấu hình Nginx"
+        else
+            log_error "❌ Không thể tạo cấu hình Nginx"
+            log_info "💡 Vui lòng chạy 'Cấu hình SSL với Let's Encrypt' để tạo"
+        fi
     fi
 
     # Kiểm tra chứng chỉ Let's Encrypt
@@ -319,11 +353,133 @@ check_ssl_status() {
 
     # Kiểm tra HTTPS
     if command_exists curl; then
-        if curl -s -o /dev/null -w "%{http_code}" "https://$domain" | grep -q "200\|301\|302"; then
-            log_success "✅ HTTPS hoạt động bình thường (https://$domain)"
+        local https_status
+        https_status=$(curl -s -k -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://$domain" 2>/dev/null || echo "000")
+        
+        if [[ "$https_status" =~ ^(200|301|302|307|308)$ ]]; then
+            log_success "✅ HTTPS hoạt động bình thường (https://$domain) - HTTP $https_status"
+        elif [[ "$https_status" == "000" ]]; then
+            log_warning "⚠️ Không thể kết nối đến https://$domain"
+            log_info "💡 Có thể domain chưa được trỏ DNS về server này"
+            log_info "💡 Hoặc firewall đang chặn kết nối"
         else
-            log_error "❌ HTTPS không hoạt động (https://$domain)"
+            log_warning "⚠️ HTTPS trả về mã lỗi: $https_status"
+            log_info "💡 Kiểm tra cấu hình nginx và SSL certificate"
         fi
+    fi
+}
+
+# Tự động sửa/tạo nginx config
+auto_fix_nginx_config() {
+    local domain="$1"
+    local n8n_port=$(config_get "n8n.port" "5678")
+    
+    # Kiểm tra SSL certificate có tồn tại không
+    if [[ ! -f "/etc/letsencrypt/live/$domain/fullchain.pem" ]]; then
+        log_error "SSL certificate chưa được cài đặt cho $domain"
+        return 1
+    fi
+    
+    # Tìm file config hiện có dựa trên domain thực tế
+    local nginx_config="/etc/nginx/sites-available/${domain}.conf"
+    
+    # Nếu không tìm thấy, tìm tất cả file config có chứa domain trong tên
+    if [[ ! -f "$nginx_config" ]]; then
+        local found_config
+        found_config=$(sudo find /etc/nginx/sites-available -name "*${domain}*.conf" -type f 2>/dev/null | head -1)
+        if [[ -n "$found_config" ]]; then
+            nginx_config="$found_config"
+        fi
+    fi
+    
+    # Source SSL nginx module để dùng hàm create_nginx_ssl_config
+    local ssl_nginx_module="$PROJECT_ROOT/src/plugins/ssl/ssl-nginx.sh"
+    if [[ -f "$ssl_nginx_module" ]]; then
+        # Định nghĩa WEBROOT_PATH nếu chưa có (không dùng readonly trong function)
+        if [[ -z "${WEBROOT_PATH:-}" ]]; then
+            export WEBROOT_PATH="/var/www/html"
+        fi
+        
+        source "$ssl_nginx_module"
+        
+        # Tạo lại nginx config (suppress output để không làm rối UI)
+        if create_nginx_ssl_config "$domain" "$n8n_port" >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    
+    # Fallback: Tạo config thủ công nếu không có module
+    log_info "Tạo nginx config thủ công..."
+    
+    sudo tee "$nginx_config" > /dev/null <<EOF
+server {
+    listen 80;
+    server_name $domain;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+        allow all;
+    }
+
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name $domain;
+
+    ssl_certificate /etc/letsencrypt/live/$domain/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$domain/privkey.pem;
+    
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    client_max_body_size 100M;
+    
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+
+    access_log /var/log/nginx/$domain.access.log;
+    error_log /var/log/nginx/$domain.error.log;
+
+    location / {
+        proxy_pass http://127.0.0.1:$n8n_port;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 7200s;
+        proxy_send_timeout 7200s;
+    }
+
+    location ~ /\. {
+        deny all;
+    }
+}
+EOF
+
+    # Enable site
+    sudo ln -sf "$nginx_config" /etc/nginx/sites-enabled/ 2>/dev/null || true
+    
+    # Test và reload nginx
+    if sudo nginx -t >/dev/null 2>&1; then
+        sudo systemctl reload nginx >/dev/null 2>&1
+        return 0
+    else
+        log_error "Nginx config có lỗi syntax"
+        return 1
     fi
 }
 
@@ -614,8 +770,8 @@ show_help() {
     echo "  • NocoDB integration cho web interface"
     echo "  • Thay thế CLI commands phức tạp"
     echo "  • Mobile-friendly dashboard"
-    echo "  • User management & permissions"
-    echo "  • Export/import capabilities"
+    echo "  • Monitoring & maintenance tools"
+    echo "  • Integration testing"
     echo "════════════════════════════════════════"
     echo ""
 }

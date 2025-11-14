@@ -227,17 +227,85 @@ EOF
 cleanup_old_backups() {
     local retention_days=$(config_get "backup.retention_days" "30")
 
-    log_info "🧹 Dọn dẹp backup cũ hơn $retention_days ngày..."
+    # Xử lý trường hợp retention = 0 (xóa tất cả)
+    if [[ $retention_days -eq 0 ]]; then
+        log_info "🧹 Dọn dẹp TẤT CẢ backup (retention = 0 ngày)..."
+    else
+        log_info "🧹 Dọn dẹp backup cũ hơn $retention_days ngày..."
+    fi
 
-    # Local cleanup
-    find "$BACKUP_BASE_DIR" -name "n8n_backup_*.tar.gz" -mtime +$retention_days -delete 2>/dev/null || true
+    # Local cleanup - đếm số files trước khi xóa
+    local local_files_before=$(find "$BACKUP_BASE_DIR" -name "n8n_backup_*.tar.gz" 2>/dev/null | wc -l)
+    local deleted_local=0
+    
+    # Tìm và xóa files cũ
+    if [[ $retention_days -eq 0 ]]; then
+        # Retention = 0: xóa tất cả files
+        while IFS= read -r file; do
+            if [[ -f "$file" ]]; then
+                rm -f "$file" 2>/dev/null && ((deleted_local++)) || true
+            fi
+        done < <(find "$BACKUP_BASE_DIR" -name "n8n_backup_*.tar.gz" 2>/dev/null)
+    else
+        # Retention > 0: chỉ xóa files cũ hơn retention_days
+        while IFS= read -r file; do
+            if [[ -f "$file" ]]; then
+                rm -f "$file" 2>/dev/null && ((deleted_local++)) || true
+            fi
+        done < <(find "$BACKUP_BASE_DIR" -name "n8n_backup_*.tar.gz" -mtime +$retention_days 2>/dev/null)
+    fi
+    
+    local local_files_after=$(find "$BACKUP_BASE_DIR" -name "n8n_backup_*.tar.gz" 2>/dev/null | wc -l)
+    
+    if [[ $deleted_local -gt 0 ]]; then
+        if [[ $retention_days -eq 0 ]]; then
+            log_success "✅ Đã xóa TẤT CẢ $deleted_local file backup local"
+        else
+            log_success "✅ Đã xóa $deleted_local file backup local (còn lại: $local_files_after files)"
+        fi
+    else
+        if [[ $retention_days -eq 0 ]]; then
+            log_info "ℹ️  Không có file backup local nào để xóa"
+        else
+            log_info "ℹ️  Không có file backup local nào cũ hơn $retention_days ngày (tổng: $local_files_after files)"
+        fi
+    fi
 
     # Google Drive cleanup (if configured)
     if [[ -f "$RCLONE_CONFIG" ]]; then
         local remote_name
         if remote_name=$(get_gdrive_remote_name); then
-            rclone delete "${remote_name}:n8n-backups" --min-age "${retention_days}d" --include "n8n_backup_*.tar.gz" 2>/dev/null || true
-            log_info "🧹 Đã dọn dẹp Google Drive (remote: $remote_name)"
+            # Đếm số files trên Google Drive trước khi xóa
+            local gdrive_files_before=$(rclone ls "${remote_name}:n8n-backups/" --include "n8n_backup_*.tar.gz" 2>/dev/null | wc -l)
+            
+            # Xóa files cũ
+            if [[ $retention_days -eq 0 ]]; then
+                # Retention = 0: xóa tất cả files
+                rclone delete "${remote_name}:n8n-backups" --include "n8n_backup_*.tar.gz" 2>/dev/null || true
+            else
+                # Retention > 0: chỉ xóa files cũ hơn retention_days
+                rclone delete "${remote_name}:n8n-backups" --min-age "${retention_days}d" --include "n8n_backup_*.tar.gz" 2>/dev/null || true
+            fi
+            
+            # Đếm số files sau khi xóa
+            local gdrive_files_after=$(rclone ls "${remote_name}:n8n-backups/" --include "n8n_backup_*.tar.gz" 2>/dev/null | wc -l)
+            local deleted_gdrive=$((gdrive_files_before - gdrive_files_after))
+            
+            if [[ $deleted_gdrive -gt 0 ]]; then
+                if [[ $retention_days -eq 0 ]]; then
+                    log_success "✅ Đã xóa TẤT CẢ $deleted_gdrive file backup trên Google Drive"
+                else
+                    log_success "✅ Đã xóa $deleted_gdrive file backup trên Google Drive (còn lại: $gdrive_files_after files)"
+                fi
+            else
+                if [[ $retention_days -eq 0 ]]; then
+                    log_info "ℹ️  Không có file backup nào trên Google Drive để xóa"
+                else
+                    log_info "ℹ️  Không có file backup nào trên Google Drive cũ hơn $retention_days ngày (tổng: $gdrive_files_after files)"
+                fi
+            fi
+        else
+            log_warn "⚠️  Không tìm thấy Google Drive remote để dọn dẹp"
         fi
     fi
 }

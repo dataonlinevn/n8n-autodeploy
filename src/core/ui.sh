@@ -197,7 +197,8 @@ ui_prompt() {
     fi
     
     while true; do
-        echo -n -e "${UI_WHITE}$prompt_text${display_default}: ${UI_NC}"
+        # Echo prompt text to stderr để không bị capture vào output
+        echo -n -e "${UI_WHITE}$prompt_text${display_default}: ${UI_NC}" >&2
         read -r user_input
         
         # Use default if empty
@@ -207,16 +208,17 @@ ui_prompt() {
         
         # Check if empty is allowed
         if [[ -z "$user_input" && "$allow_empty" == "false" ]]; then
-            echo -e "${UI_RED}${UI_CROSS} Giá trị không được để trống${UI_NC}"
+            echo -e "${UI_RED}${UI_CROSS} Giá trị không được để trống${UI_NC}" >&2
             continue
         fi
         
         # Validate input
         if [[ "$user_input" =~ $validation_pattern ]]; then
+            # Chỉ echo user_input ra stdout (để capture)
             echo "$user_input"
             return 0
         else
-            echo -e "${UI_RED}${UI_CROSS} $error_message${UI_NC}"
+            echo -e "${UI_RED}${UI_CROSS} $error_message${UI_NC}" >&2
         fi
     done
 }

@@ -58,7 +58,7 @@ Lưu ý:
 
 ### 2.4 Database Manager (NocoDB)
 - Cài đặt/tích hợp NocoDB vào stack
-- Mở giao diện NocoDB, quản lý users, export/import, monitoring, maintenance
+- Mở giao diện NocoDB, monitoring, maintenance, testing
 - Cấu hình SSL riêng cho NocoDB nếu có domain (ví dụ: db.yourdomain.com)
 
 ### 2.5 Service Management

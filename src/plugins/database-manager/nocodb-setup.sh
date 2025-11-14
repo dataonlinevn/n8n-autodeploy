@@ -81,7 +81,12 @@ configure_nocodb_domain() {
 }
 
 prompt_custom_domain() {
-    echo -n -e "${UI_WHITE}Nhập domain cho NocoDB: ${UI_NC}"
+    echo ""
+    echo -e "${UI_CYAN}🌐 Nhập domain cho NocoDB:${UI_NC}"
+    echo -e "${UI_GRAY}   • Có thể nhập domain chính (ví dụ: example.com)${UI_NC}"
+    echo -e "${UI_GRAY}   • Hoặc subdomain (ví dụ: nocodb.example.com)${UI_NC}"
+    echo ""
+    echo -n -e "${UI_WHITE}Domain: ${UI_NC}"
     read -r custom_domain
     
     if [[ -z "$custom_domain" ]]; then
@@ -95,6 +100,7 @@ prompt_custom_domain() {
         return 0
     else
         ui_status "error" "Domain không hợp lệ"
+        echo -e "${UI_YELLOW}💡 Ví dụ domain hợp lệ: example.com, nocodb.example.com${UI_NC}"
         return 1
     fi
 }
