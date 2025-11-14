@@ -55,6 +55,7 @@ Yêu cầu:
 
 Lưu ý:
 - Lần đầu cần cấu hình rclone (theo hướng dẫn trên màn hình), chọn remote dành cho Google Drive.
+- Nếu VPS không mở được trình duyệt, chạy `rclone authorize "drive"` trên máy cá nhân (Windows/Linux), copy toàn bộ JSON token và dán vào bước cấu hình trong Manager.
 
 ### 2.4 Database Manager (NocoDB)
 - Cài đặt/tích hợp NocoDB vào stack
