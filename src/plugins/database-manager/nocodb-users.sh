@@ -14,12 +14,25 @@ nocodb_admin_login() {
     local admin_email=$(config_get "nocodb.admin_email" "")
     local admin_password_file="$N8N_COMPOSE_DIR/.nocodb-admin-password"
     
-    if [[ -z "$admin_email" ]] || [[ ! -f "$admin_password_file" ]]; then
+    if [[ -z "$admin_email" ]]; then
+        ui_warning "Admin email chưa được cấu hình" >&2
         return 1
     fi
     
-    local admin_password=$(cat "$admin_password_file" 2>/dev/null)
+    if [[ ! -f "$admin_password_file" ]]; then
+        ui_warning "Admin password file không tồn tại: $admin_password_file" >&2
+        return 1
+    fi
+    
+    local admin_password=$(cat "$admin_password_file" 2>/dev/null | tr -d '\n\r')
     if [[ -z "$admin_password" ]]; then
+        ui_warning "Admin password trống" >&2
+        return 1
+    fi
+    
+    # Check if NocoDB is running
+    if ! curl -s "http://localhost:${NOCODB_PORT}/api/v1/health" >/dev/null 2>&1; then
+        ui_warning "NocoDB không phản hồi trên port ${NOCODB_PORT}" >&2
         return 1
     fi
     
@@ -32,12 +45,24 @@ nocodb_admin_login() {
             \"password\": \"$admin_password\"
         }" 2>/dev/null)
     
-    if echo "$response" | jq -e '.token' >/dev/null 2>&1; then
-        echo "$response" | jq -r '.token'
-        return 0
-    else
+    # Check for errors in response
+    if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+        local error_msg=$(echo "$response" | jq -r '.message // .error' 2>/dev/null || echo "Unknown error")
+        ui_warning "Login failed: $error_msg" >&2
         return 1
     fi
+    
+    # Extract token
+    if echo "$response" | jq -e '.token' >/dev/null 2>&1; then
+        local token=$(echo "$response" | jq -r '.token' 2>/dev/null)
+        if [[ -n "$token" ]] && [[ "$token" != "null" ]]; then
+            echo "$token"
+            return 0
+        fi
+    fi
+    
+    ui_warning "Không thể lấy token từ response" >&2
+    return 1
 }
 
 # ===== USER MANAGEMENT FUNCTIONS =====
@@ -100,35 +125,60 @@ list_nocodb_users() {
     
     ui_stop_spinner
     
-    if [[ -n "$users_response" ]] && echo "$users_response" | jq -e '.list' >/dev/null 2>&1; then
+    # Debug: Check response
+    if [[ -z "$users_response" ]]; then
+        ui_error "Không nhận được response từ API" "API_NO_RESPONSE" "Kiểm tra NocoDB đang chạy và port đúng"
+        return 1
+    fi
+    
+    # Check for error in response
+    if echo "$users_response" | jq -e '.error' >/dev/null 2>&1; then
+        local error_msg=$(echo "$users_response" | jq -r '.message // .error' 2>/dev/null || echo "Unknown error")
+        ui_error "API Error: $error_msg" "API_ERROR" "Kiểm tra authentication token"
+        return 1
+    fi
+    
+    # Try different response formats
+    local user_list=""
+    local user_count=0
+    
+    # Check for .list format (v1 API)
+    if echo "$users_response" | jq -e '.list' >/dev/null 2>&1; then
+        user_list=$(echo "$users_response" | jq -r '.list[]' 2>/dev/null)
+        user_count=$(echo "$users_response" | jq '.list | length' 2>/dev/null || echo "0")
+    # Check for array format (direct array)
+    elif echo "$users_response" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        user_list=$(echo "$users_response" | jq -r '.[]' 2>/dev/null)
+        user_count=$(echo "$users_response" | jq 'length' 2>/dev/null || echo "0")
+    # Check for .users format
+    elif echo "$users_response" | jq -e '.users' >/dev/null 2>&1; then
+        user_list=$(echo "$users_response" | jq -r '.users[]' 2>/dev/null)
+        user_count=$(echo "$users_response" | jq '.users | length' 2>/dev/null || echo "0")
+    else
+        # Debug: Show raw response for troubleshooting
+        ui_warning "Response format không nhận dạng được"
+        ui_info "Response: $(echo "$users_response" | head -c 200)"
+        ui_error "Không thể parse danh sách users" "API_FORMAT_ERROR" "Kiểm tra NocoDB API version"
+        return 1
+    fi
+    
+    if [[ "$user_count" -gt 0 ]]; then
         echo ""
         ui_info "👥 Users hiện tại:"
         echo ""
         
-        # Use table formatting
-        local headers="Email|Role|Status|Last Login"
-        local rows=()
-        
-        # Parse users from API response
-        local user_count=$(echo "$users_response" | jq '.list | length' 2>/dev/null || echo "0")
-        
-        if [[ "$user_count" -gt 0 ]]; then
-            echo "$users_response" | jq -r '.list[] | "\(.email)|\(.roles[0].title // "N/A")|🟢 Active|\(.created_at // "N/A")"' | while IFS='|' read -r email role status login; do
-                rows+=("$email|$role|$status|$login")
-            done
-            
-            # Display first few users as table
-            if [[ ${#rows[@]} -gt 0 ]]; then
-                ui_table "$headers" "${rows[@]}"
-            fi
-        else
-            ui_info "Chưa có users nào (ngoài admin)"
+        # Display users
+        if echo "$users_response" | jq -e '.list' >/dev/null 2>&1; then
+            echo "$users_response" | jq -r '.list[] | "  • \(.email) - \(.firstname // "N/A") \(.lastname // "") - Role: \(.roles.org_level_creator // "N/A")"' 2>/dev/null || \
+            echo "$users_response" | jq -r '.list[] | "  • \(.email) - \(.firstname // "N/A")"' 2>/dev/null
+        elif echo "$users_response" | jq -e 'type == "array"' >/dev/null 2>&1; then
+            echo "$users_response" | jq -r '.[] | "  • \(.email) - \(.firstname // "N/A")"' 2>/dev/null
         fi
         
         ui_success "Tổng: $user_count users"
     else
-        ui_error "Không thể lấy danh sách users" "API_ERROR" "Kiểm tra NocoDB API và authentication"
-        return 1
+        ui_info "Chưa có users nào (ngoài admin)"
+        ui_success "Tổng: 0 users"
     fi
 }
 

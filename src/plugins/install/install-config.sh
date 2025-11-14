@@ -45,7 +45,13 @@ collect_installation_configuration() {
     done
 
     # Domain & Webhook URL
-    echo -n -e "${UI_WHITE}Domain cho N8N (bỏ trống nếu chưa dùng domain): ${UI_NC}"
+    echo ""
+    echo -e "${UI_CYAN}🌐 Domain cho N8N (tùy chọn):${UI_NC}"
+    echo -e "${UI_GRAY}   • Bỏ trống nếu chưa có domain${UI_NC}"
+    echo -e "${UI_GRAY}   • Có thể nhập domain chính (ví dụ: example.com)${UI_NC}"
+    echo -e "${UI_GRAY}   • Hoặc subdomain (ví dụ: n8n.example.com)${UI_NC}"
+    echo ""
+    echo -n -e "${UI_WHITE}Domain (Enter để bỏ qua): ${UI_NC}"
     read -r N8N_DOMAIN
 
     if [[ -n "$N8N_DOMAIN" ]]; then
@@ -54,10 +60,12 @@ collect_installation_configuration() {
             N8N_WEBHOOK_URL="http://$N8N_DOMAIN"
         else
             ui_warning "Domain không hợp lệ, bỏ qua domain"
+            echo -e "${UI_YELLOW}💡 Ví dụ domain hợp lệ: example.com, n8n.example.com${UI_NC}"
             N8N_DOMAIN=""
             N8N_WEBHOOK_URL="http://localhost:$N8N_PORT"
         fi
     else
+        ui_info "Sử dụng localhost với port $N8N_PORT"
         N8N_WEBHOOK_URL="http://localhost:$N8N_PORT"
     fi
 

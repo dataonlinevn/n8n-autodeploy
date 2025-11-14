@@ -8,7 +8,18 @@ set -euo pipefail
 create_nginx_http_config() {
     local domain="$1"
     local n8n_port="${2:-5678}"
+    
+    # Tìm file config hiện có dựa trên domain thực tế
     local nginx_conf="/etc/nginx/sites-available/${domain}.conf"
+    
+    # Nếu không tìm thấy, tìm tất cả file config có chứa domain trong tên
+    if [[ ! -f "$nginx_conf" ]]; then
+        local found_config
+        found_config=$(sudo find /etc/nginx/sites-available -name "*${domain}*.conf" -type f 2>/dev/null | head -1)
+        if [[ -n "$found_config" ]]; then
+            nginx_conf="$found_config"
+        fi
+    fi
 
     ui_section "Tạo cấu hình Nginx HTTP"
 
@@ -24,20 +35,20 @@ create_nginx_http_config() {
     # Step 2: Create HTTP-only nginx config for certification
     ui_start_spinner "Tạo HTTP config cho Let's Encrypt"
 
-    cat >"$nginx_conf" <<EOF
+    sudo tee "$nginx_conf" > /dev/null <<'NGINX_EOF'
 server {
     listen 80;
-    server_name $domain;
+    server_name DOMAIN_PLACEHOLDER;
 
     # Let's Encrypt challenge
     location /.well-known/acme-challenge/ {
-        root $WEBROOT_PATH;
+        root WEBROOT_PLACEHOLDER;
         allow all;
     }
 
     # Temporary: Proxy to N8N for testing
     location / {
-        proxy_pass http://127.0.0.1:$n8n_port;
+        proxy_pass http://127.0.0.1:PORT_PLACEHOLDER;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -52,7 +63,12 @@ server {
         proxy_send_timeout 7200s;
     }
 }
-EOF
+NGINX_EOF
+    
+    # Replace placeholders
+    sudo sed -i "s|DOMAIN_PLACEHOLDER|$domain|g" "$nginx_conf"
+    sudo sed -i "s|WEBROOT_PLACEHOLDER|$WEBROOT_PATH|g" "$nginx_conf"
+    sudo sed -i "s|PORT_PLACEHOLDER|$n8n_port|g" "$nginx_conf"
 
     ui_stop_spinner
     ui_success "HTTP config tạo thành công"
@@ -83,7 +99,18 @@ EOF
 create_nginx_ssl_config() {
     local domain="$1"
     local n8n_port="${2:-5678}"
+    
+    # Tìm file config hiện có dựa trên domain thực tế
     local nginx_conf="/etc/nginx/sites-available/${domain}.conf"
+    
+    # Nếu không tìm thấy, tìm tất cả file config có chứa domain trong tên
+    if [[ ! -f "$nginx_conf" ]]; then
+        local found_config
+        found_config=$(sudo find /etc/nginx/sites-available -name "*${domain}*.conf" -type f 2>/dev/null | head -1)
+        if [[ -n "$found_config" ]]; then
+            nginx_conf="$found_config"
+        fi
+    fi
 
     ui_section "Nâng cấp lên HTTPS config"
 
@@ -95,13 +122,13 @@ create_nginx_ssl_config() {
 
     ui_start_spinner "Tạo HTTPS config"
 
-    cat >"$nginx_conf" <<EOF
+    sudo tee "$nginx_conf" > /dev/null <<'NGINX_EOF'
 server {
     listen 80;
-    server_name $domain;
+    server_name DOMAIN_PLACEHOLDER;
 
     location /.well-known/acme-challenge/ {
-        root $WEBROOT_PATH;
+        root WEBROOT_PLACEHOLDER;
         allow all;
     }
 
@@ -112,10 +139,10 @@ server {
 
 server {
     listen 443 ssl http2;
-    server_name $domain;
+    server_name DOMAIN_PLACEHOLDER;
 
-    ssl_certificate /etc/letsencrypt/live/$domain/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$domain/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/privkey.pem;
     
     # Include Let's Encrypt options if available
     include /etc/letsencrypt/options-ssl-nginx.conf;
@@ -129,11 +156,11 @@ server {
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
 
-    access_log /var/log/nginx/$domain.access.log;
-    error_log /var/log/nginx/$domain.error.log;
+    access_log /var/log/nginx/DOMAIN_PLACEHOLDER.access.log;
+    error_log /var/log/nginx/DOMAIN_PLACEHOLDER.error.log;
 
     location / {
-        proxy_pass http://127.0.0.1:$n8n_port;
+        proxy_pass http://127.0.0.1:PORT_PLACEHOLDER;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -154,7 +181,12 @@ server {
         deny all;
     }
 }
-EOF
+NGINX_EOF
+    
+    # Replace placeholders
+    sudo sed -i "s|DOMAIN_PLACEHOLDER|$domain|g" "$nginx_conf"
+    sudo sed -i "s|WEBROOT_PLACEHOLDER|$WEBROOT_PATH|g" "$nginx_conf"
+    sudo sed -i "s|PORT_PLACEHOLDER|$n8n_port|g" "$nginx_conf"
 
     ui_stop_spinner
 
@@ -178,10 +210,10 @@ create_self_signed_nginx_config() {
     local n8n_port="${2:-5678}"
     local nginx_conf="/etc/nginx/sites-available/${domain}.conf"
     
-    cat >"$nginx_conf" <<EOF
+    cat >"$nginx_conf" <<'NGINX_EOF'
 server {
     listen 80;
-    server_name $domain;
+    server_name DOMAIN_PLACEHOLDER;
 
     location / {
         return 301 https://$host$request_uri;
@@ -190,10 +222,10 @@ server {
 
 server {
     listen 443 ssl http2;
-    server_name $domain;
+    server_name DOMAIN_PLACEHOLDER;
 
-    ssl_certificate /etc/ssl/self-signed/$domain.crt;
-    ssl_certificate_key /etc/ssl/self-signed/$domain.key;
+    ssl_certificate /etc/ssl/self-signed/DOMAIN_PLACEHOLDER.crt;
+    ssl_certificate_key /etc/ssl/self-signed/DOMAIN_PLACEHOLDER.key;
     
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
@@ -201,11 +233,11 @@ server {
 
     client_max_body_size 100M;
     
-    access_log /var/log/nginx/$domain.access.log;
-    error_log /var/log/nginx/$domain.error.log;
+    access_log /var/log/nginx/DOMAIN_PLACEHOLDER.access.log;
+    error_log /var/log/nginx/DOMAIN_PLACEHOLDER.error.log;
 
     location / {
-        proxy_pass http://127.0.0.1:$n8n_port;
+        proxy_pass http://127.0.0.1:PORT_PLACEHOLDER;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -220,7 +252,11 @@ server {
         proxy_send_timeout 7200s;
     }
 }
-EOF
+NGINX_EOF
+    
+    # Replace placeholders
+    sed -i "s|DOMAIN_PLACEHOLDER|$domain|g" "$nginx_conf"
+    sed -i "s|PORT_PLACEHOLDER|$n8n_port|g" "$nginx_conf"
 
     # Test and reload
     nginx -t && systemctl reload nginx
