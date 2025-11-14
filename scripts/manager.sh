@@ -770,8 +770,8 @@ show_help() {
     echo "  • NocoDB integration cho web interface"
     echo "  • Thay thế CLI commands phức tạp"
     echo "  • Mobile-friendly dashboard"
-    echo "  • User management & permissions"
-    echo "  • Export/import capabilities"
+    echo "  • Monitoring & maintenance tools"
+    echo "  • Integration testing"
     echo "════════════════════════════════════════"
     echo ""
 }

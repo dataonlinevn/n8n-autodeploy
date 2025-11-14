@@ -49,7 +49,6 @@ cloudfly-n8n-manager/
 │       ├── database-manager/
 │       │   ├── main.sh            # Entry NocoDB
 │       │   ├── nocodb-setup.sh
-│       │   ├── nocodb-users.sh
 │       │   ├── nocodb-monitoring.sh
 │       │   ├── nocodb-maintenance.sh
 │       │   ├── nocodb-testing.sh
@@ -104,8 +103,8 @@ bash scripts/manager.sh
 - Mô-đun: `backup-utils.sh`, `backup-gdrive.sh`, `backup-scheduler.sh`.
 
 ### Database Manager (NocoDB)
-- Cài đặt/tích hợp NocoDB, quản lý users, monitoring, maintenance, testing, integration với menu chính.
-- Mô-đun: `nocodb-setup.sh`, `nocodb-users.sh`, `nocodb-monitoring.sh`, `nocodb-maintenance.sh`, `nocodb-testing.sh`, `nocodb-integration.sh`.
+- Cài đặt/tích hợp NocoDB, monitoring, maintenance, testing, integration với menu chính.
+- Mô-đun: `nocodb-setup.sh`, `nocodb-monitoring.sh`, `nocodb-maintenance.sh`, `nocodb-testing.sh`, `nocodb-integration.sh`.
 
 ## Giao diện & Logging
 - UI thống nhất: `ui_info`, `ui_success`, `ui_error`, `ui_warning`, `ui_table`, progress đa bước.

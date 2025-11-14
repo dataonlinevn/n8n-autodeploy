@@ -19,7 +19,6 @@ PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$PLUGIN_DIR")")"
 
 # Load sub-modules
 source "$PLUGIN_DIR/nocodb-setup.sh"
-source "$PLUGIN_DIR/nocodb-users.sh"
 source "$PLUGIN_DIR/nocodb-monitoring.sh"
 source "$PLUGIN_DIR/nocodb-maintenance.sh"
 source "$PLUGIN_DIR/nocodb-testing.sh"
@@ -39,7 +38,7 @@ database_manager_main() {
     while true; do
         show_database_manager_menu
         
-        echo -n -e "${UI_WHITE}Chọn [0-9]: ${UI_NC}"
+        echo -n -e "${UI_WHITE}Chọn [0-8]: ${UI_NC}"
         read -r choice
 
         case "$choice" in
@@ -47,11 +46,10 @@ database_manager_main() {
         2) install_nocodb ;;
         3) open_nocodb_interface ;;
         4) setup_nocodb_ssl ;; 
-        5) manage_nocodb_users ;;
-        6) monitor_nocodb_performance ;;
-        7) troubleshoot_nocodb ;;
-        8) run_maintenance_tasks ;;
-        9) run_integration_tests ;;
+        5) monitor_nocodb_performance ;;
+        6) troubleshoot_nocodb ;;
+        7) run_maintenance_tasks ;;
+        8) run_integration_tests ;;
         0) return 0 ;;
         *) ui_error "Lựa chọn không hợp lệ" ;;
         esac
@@ -83,16 +81,13 @@ show_database_manager_menu() {
     echo "  3) 🌐 Mở giao diện NocoDB"
     echo "  4) 🔒 Cài đặt SSL"
     echo ""
-    echo "👥 USER MANAGEMENT"
-    echo "  5) 👥 Quản lý Users"
-    echo ""
     echo "📊 MONITORING & TROUBLESHOOTING"
-    echo "  6) 📊 Performance Monitoring"
-    echo "  7) 🔧 Troubleshooting"
+    echo "  5) 📊 Performance Monitoring"
+    echo "  6) 🔧 Troubleshooting"
     echo ""
     echo "🔧 MAINTENANCE"
-    echo "  8) 🔧 Maintenance Tasks"
-    echo "  9) 🧪 Integration Tests"
+    echo "  7) 🔧 Maintenance Tasks"
+    echo "  8) 🧪 Integration Tests"
     echo ""
     echo "  0) ⬅️  Quay lại"
     echo ""
