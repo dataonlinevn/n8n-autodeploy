@@ -16,6 +16,7 @@ check_n8n_requirements() {
         "check_cpu_cores"
         "check_internet_connection"
         "check_required_commands"
+        "check_docker_installation"
     )
 
     for check in "${checks[@]}"; do
@@ -111,4 +112,55 @@ check_required_commands() {
     fi
 }
 
-export -f check_n8n_requirements check_os_version check_ram_requirements check_disk_space check_cpu_cores check_internet_connection check_required_commands
+check_docker_installation() {
+    if ! command_exists docker; then
+        ui_error "Docker chưa được cài đặt" "DOCKER_NOT_INSTALLED"
+        echo ""
+        echo "Docker là bắt buộc để cài đặt N8N. Vui lòng cài đặt Docker trước:"
+        echo ""
+        echo "  curl -fsSL https://get.docker.com -o get-docker.sh"
+        echo "  sudo sh get-docker.sh"
+        echo "  sudo usermod -aG docker \$USER"
+        echo ""
+        echo "Sau đó đăng xuất và đăng nhập lại, hoặc chạy: newgrp docker"
+        echo ""
+        return 1
+    fi
+
+    # Kiểm tra Docker daemon đang chạy
+    if ! docker info >/dev/null 2>&1; then
+        ui_error "Docker daemon không chạy" "DOCKER_DAEMON_NOT_RUNNING"
+        echo ""
+        echo "Vui lòng khởi động Docker daemon:"
+        echo "  sudo systemctl start docker"
+        echo "  sudo systemctl enable docker"
+        echo ""
+        return 1
+    fi
+
+    # Kiểm tra Docker Compose
+    if ! command_exists docker-compose && ! docker compose version >/dev/null 2>&1; then
+        ui_error "Docker Compose chưa được cài đặt" "DOCKER_COMPOSE_NOT_INSTALLED"
+        echo ""
+        echo "Vui lòng cài đặt Docker Compose:"
+        echo "  sudo apt-get update"
+        echo "  sudo apt-get install -y docker-compose-plugin"
+        echo ""
+        return 1
+    fi
+
+    local docker_version=$(docker --version | cut -d' ' -f3 | cut -d',' -f1)
+    ui_success "Docker: $docker_version"
+    
+    if docker compose version >/dev/null 2>&1; then
+        local compose_version=$(docker compose version | cut -d' ' -f4)
+        ui_success "Docker Compose: $compose_version"
+    elif command_exists docker-compose; then
+        local compose_version=$(docker-compose --version | cut -d' ' -f4 | cut -d',' -f1)
+        ui_success "Docker Compose: $compose_version"
+    fi
+
+    return 0
+}
+
+export -f check_n8n_requirements check_os_version check_ram_requirements check_disk_space check_cpu_cores check_internet_connection check_required_commands check_docker_installation

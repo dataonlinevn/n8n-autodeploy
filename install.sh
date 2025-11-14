@@ -40,7 +40,7 @@ show_header() {
 ╭──────────────────────────────────────────────────────────╮
 │                DataOnline N8N Manager                    │
 │                   Version 1.0.0                          │ 
-│               https://dataonline.vn                     │
+│               https://dataonline.vn                      │
 ╰──────────────────────────────────────────────────────────╯
 EOF
     echo -e "${NC}"
@@ -89,9 +89,19 @@ install_manager() {
         sudo rm -rf "$INSTALL_DIR"
     fi
     
-    # Clone repository
-    log_info "Downloading latest version..."
-    sudo git clone "$REPO_URL" "$INSTALL_DIR"
+    # Check if we're in a git repository (development mode)
+    local current_dir
+    current_dir="$(pwd)"
+    if [[ -d "$current_dir/.git" ]] && [[ -f "$current_dir/scripts/manager.sh" ]]; then
+        log_info "Development mode detected: Using local source at $current_dir"
+        log_info "Copying from local source..."
+        sudo cp -r "$current_dir" "$INSTALL_DIR"
+        sudo rm -rf "$INSTALL_DIR/.git"
+    else
+        # Clone repository
+        log_info "Downloading latest version..."
+        sudo git clone "$REPO_URL" "$INSTALL_DIR"
+    fi
     
     # Set permissions
     sudo chmod +x "$INSTALL_DIR/scripts/manager.sh"
@@ -115,15 +125,6 @@ complete_setup() {
     echo "  1. Run the manager and install N8N"
     echo "  2. Configure domain and SSL (optional)"
     echo "  3. Setup automated backups"
-    echo ""
-    echo -e "${GREEN}Documentation:${NC}"
-    echo "  • Installation Guide: $INSTALL_DIR/INSTALLATION.md"
-    echo "  • User Manual: $INSTALL_DIR/USER_MANUAL.md"
-    echo "  • Troubleshooting: $INSTALL_DIR/TROUBLESHOOTING.md"
-    echo ""
-    echo -e "${GREEN}Support:${NC}"
-    echo "  • GitHub: https://github.com/vanntpt/n8n-autodeploy"
-    echo "  • Email: support@dataonline.vn"
     echo ""
 }
 

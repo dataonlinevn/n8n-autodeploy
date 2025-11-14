@@ -6,8 +6,21 @@
 
 set -euo pipefail
 
-# Lấy thư mục script
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Lấy thư mục script (xử lý symlink)
+# Sử dụng realpath nếu có, nếu không thì resolve thủ công
+if command -v realpath >/dev/null 2>&1; then
+    SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+else
+    # Fallback: resolve symlink thủ công
+    SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+    while [ -h "$SCRIPT_SOURCE" ]; do
+        TEMP_DIR="$(cd -P "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+        SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+        [[ "$SCRIPT_SOURCE" != /* ]] && SCRIPT_SOURCE="$TEMP_DIR/$SCRIPT_SOURCE"
+    done
+    SCRIPT_DIR="$(cd -P "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+fi
+readonly SCRIPT_DIR
 readonly PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Source các module core
@@ -109,42 +122,40 @@ show_main_menu() {
     local workflow_count=$(get_workflow_count_menu)
     
     # Header
-    echo -e "${UI_CYAN}╭──────────────────────────────────────────────────────────╮${UI_NC}"
-    echo -e "${UI_CYAN}│                $APP_NAME                    │${UI_NC}"
-    echo -e "${UI_CYAN}│              Phiên bản: v$APP_VERSION                 │${UI_NC}"
-    echo -e "${UI_CYAN}│                https://dataonline.vn                    │${UI_NC}"
-    echo -e "${UI_CYAN}├──────────────────────────────────────────────────────────┤${UI_NC}"
+    echo -e "${UI_CYAN}$APP_NAME${UI_NC}"
+    echo -e "${UI_CYAN}Phiên bản: v$APP_VERSION${UI_NC}"
+    echo -e "${UI_CYAN}https://dataonline.vn${UI_NC}"
+    echo ""
     
     # Quick Status Panel
-    echo -e "${UI_CYAN}│${UI_NC} ${UI_WHITE}📊 SYSTEM STATUS${UI_NC}"
-    echo -e "${UI_CYAN}│${UI_NC}   N8N:       $n8n_status"
-    echo -e "${UI_CYAN}│${UI_NC}   SSL:       $ssl_status"
-    echo -e "${UI_CYAN}│${UI_NC}   Backups:   $backup_count backups"
-    echo -e "${UI_CYAN}│${UI_NC}   Workflows: $workflow_count workflows"
-    echo -e "${UI_CYAN}├──────────────────────────────────────────────────────────┤${UI_NC}"
+    echo -e "${UI_WHITE}SYSTEM STATUS${UI_NC}"
+    echo "   N8N:       $n8n_status"
+    echo "   SSL:       $ssl_status"
+    echo "   Backups:   $backup_count backups"
+    echo "   Workflows: $workflow_count workflows"
+    echo ""
     
     # Main Functions - Grouped
-    echo -e "${UI_CYAN}│${UI_NC} ${UI_WHITE}📦 INSTALLATION & SETUP${UI_NC}"
-    echo -e "${UI_CYAN}│${UI_NC}   1️⃣  🚀 Cài đặt N8N"
-    echo -e "${UI_CYAN}│${UI_NC}   5️⃣  🔄 Cập nhật phiên bản"
-    echo -e "${UI_CYAN}│${UI_NC}"
-    echo -e "${UI_CYAN}│${UI_NC} ${UI_WHITE}⚙️  MANAGEMENT${UI_NC}"
-    echo -e "${UI_CYAN}│${UI_NC}   2️⃣  🌐 Quản lý tên miền & SSL"
-    echo -e "${UI_CYAN}│${UI_NC}   3️⃣  ⚙️  Quản lý dịch vụ"
-    echo -e "${UI_CYAN}│${UI_NC}   4️⃣  💾 Sao lưu & khôi phục"
-    echo -e "${UI_CYAN}│${UI_NC}"
-    echo -e "${UI_CYAN}│${UI_NC} ${UI_WHITE}🗄️  DATABASE & WORKFLOWS${UI_NC}"
-    echo -e "${UI_CYAN}│${UI_NC}   6️⃣  🗄️  Quản lý Database"
-    echo -e "${UI_CYAN}│${UI_NC}   7️⃣  🔄 Workflow Manager"
-    echo -e "${UI_CYAN}│${UI_NC}"
-    echo -e "${UI_CYAN}│${UI_NC} ${UI_WHITE}🛠️  SUPPORT${UI_NC}"
-    echo -e "${UI_CYAN}│${UI_NC}   A️  📋 Thông tin hệ thống"
-    echo -e "${UI_CYAN}│${UI_NC}   B️  🔧 Cấu hình"
-    echo -e "${UI_CYAN}│${UI_NC}   C️  📚 Trợ giúp & tài liệu"
-    echo -e "${UI_CYAN}│${UI_NC}   D️  🧪 Chế độ debug"
-    echo -e "${UI_CYAN}│${UI_NC}"
-    echo -e "${UI_CYAN}│${UI_NC}   0️⃣  ❌ Thoát"
-    echo -e "${UI_CYAN}╰──────────────────────────────────────────────────────────╯${UI_NC}"
+    echo -e "${UI_WHITE}INSTALLATION & SETUP${UI_NC}"
+    echo "   1. Cài đặt N8N"
+    echo "   5. Cập nhật phiên bản"
+    echo ""
+    echo -e "${UI_WHITE}MANAGEMENT${UI_NC}"
+    echo "   2. Quản lý tên miền & SSL"
+    echo "   3. Quản lý dịch vụ"
+    echo "   4. Sao lưu & khôi phục"
+    echo ""
+    echo -e "${UI_WHITE}DATABASE & WORKFLOWS${UI_NC}"
+    echo "   6. Quản lý Database"
+    echo "   7. Workflow Manager"
+    echo ""
+    echo -e "${UI_WHITE}SUPPORT${UI_NC}"
+    echo "   A. Thông tin hệ thống"
+    echo "   B. Cấu hình"
+    echo "   C. Trợ giúp & tài liệu"
+    echo "   D. Chế độ debug"
+    echo ""
+    echo "   0. Thoát"
     echo ""
 }
 
