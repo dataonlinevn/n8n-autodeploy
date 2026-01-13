@@ -7,7 +7,7 @@
 set -euo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$PLUGIN_DIR")")"
+PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$(dirname "$PLUGIN_DIR")")")"
 
 [[ -z "${LOGGER_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/logger.sh"
 [[ -z "${CONFIG_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/config.sh"
@@ -18,66 +18,86 @@ PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$PLUGIN_DIR")")"
 source "$PLUGIN_DIR/n8n-service.sh"
 source "$PLUGIN_DIR/nginx-service.sh"
 source "$PLUGIN_DIR/database-service.sh"
+source "$PLUGIN_DIR/redis-service.sh"
+source "$PLUGIN_DIR/nocodb-service.sh"
 
-readonly SERVICE_LOADED=true
+[[ -z "${SERVICE_LOADED:-}" ]] && readonly SERVICE_LOADED=true
 
 # ===== MAIN SERVICE MENU =====
 
 service_management_main() {
-    ui_header "Quản lý Dịch vụ N8N"
+    ui_header "Quan ly Dich vu"
 
     while true; do
         show_service_status
         show_service_menu
 
-        echo -n -e "${UI_WHITE}Chọn [0-8]: ${UI_NC}"
+        echo -n "Lua chon cua ban: "
         read -r choice
 
         case "$choice" in
         1) control_n8n_service ;;
         2) control_nginx_service ;;
         3) control_database_service ;;
-        4) show_detailed_status ;;
-        5) manage_auto_start ;;
-        6) restart_all_services ;;
-        7) check_service_logs ;;
-        8) configure_service_dependencies ;;
+        4) control_redis_service ;;
+        5) control_nocodb_service ;;
+        6) show_detailed_status ;;
+        7) manage_auto_start ;;
+        8) restart_all_services ;;
+        9) check_service_logs ;;
         0) return 0 ;;
-        *) ui_status "error" "Lựa chọn không hợp lệ" ;;
+        *) echo "Lua chon khong hop le" ;;
         esac
 
         echo ""
         read -p "Nhấn Enter để tiếp tục..."
+        ui_header "Quản lý Dịch vụ Hệ thống"
     done
 }
 
 show_service_status() {
-    ui_section "Trạng thái Dịch vụ"
+    ui_section "Trang thai Dich vu"
 
     local n8n_status=$(get_n8n_status)
     local nginx_status=$(get_nginx_status)
     local db_status=$(get_database_status)
+    local redis_status=$(get_redis_status)
+    
+    # NocoDB - chi hien thi neu da cai dat
+    local nocodb_status=""
+    if is_nocodb_installed 2>/dev/null; then
+        nocodb_status=$(get_nocodb_service_status)
+    fi
 
-    echo "┌─────────────────────────────────────────┐"
-    echo "│ Dịch vụ          │ Trạng thái           │"
-    echo "├─────────────────────────────────────────┤"
-    printf "│ %-15s │ %-18s │\n" "N8N" "$n8n_status"
-    printf "│ %-15s │ %-18s │\n" "Nginx" "$nginx_status"
-    printf "│ %-15s │ %-18s │\n" "Database" "$db_status"
-    echo "└─────────────────────────────────────────┘"
+    echo "  N8N:        $n8n_status"
+    echo "  Nginx:      $nginx_status"
+    echo "  PostgreSQL: $db_status"
+    echo "  Redis:      $redis_status"
+    if [[ -n "$nocodb_status" ]]; then
+        echo "  NocoDB:     $nocodb_status"
+    fi
+    echo ""
 }
 
 show_service_menu() {
+    echo "QUAN LY RIENG BIET"
+    echo "  1) N8N (Ung dung chinh)"
+    echo "  2) Nginx (Web server)"
+    echo "  3) PostgreSQL (Co so du lieu)"
+    echo "  4) Redis (Cache)"
+    if is_nocodb_installed 2>/dev/null; then
+        echo "  5) NocoDB (Database UI)"
+    else
+        echo "  5) NocoDB (Chua cai dat)"
+    fi
     echo ""
-    echo "1) 🚀 Quản lý N8N"
-    echo "2) 🌐 Quản lý Nginx"
-    echo "3) 🗄️  Quản lý Database"
-    echo "4) 📊 Trạng thái chi tiết"
-    echo "5) ⚙️  Cấu hình Auto-start"
-    echo "6) 🔄 Restart tất cả"
-    echo "7) 📝 Xem Logs"
-    echo "8) 🔗 Cấu hình Dependencies"
-    echo "0) ❌ Quay lại"
+    echo "CONG CU HE THONG"
+    echo "  6) Xem chi tiet trang thai"
+    echo "  7) Tu dong khoi dong"
+    echo "  8) Khoi dong lai tat ca"
+    echo "  9) Xem nhat ky (Logs)"
+    echo ""
+    echo "  0) Quay lai"
     echo ""
 }
 
@@ -90,15 +110,14 @@ control_n8n_service() {
     echo "Trạng thái hiện tại: $current_status"
     echo ""
 
-    echo "1) ▶️  Start N8N"
-    echo "2) ⏹️  Stop N8N"
-    echo "3) 🔄 Restart N8N"
-    echo "4) 📊 Status N8N"
-    echo "0) ⬅️  Quay lại"
+    echo "1) Khởi động n8n"
+    echo "2) Dừng n8n"
+    echo "3) Khởi động lại"
+    echo "4) Trạng thái chi tiết"
+    echo "0) Quay lại"
     echo ""
 
-    echo -n -e "${UI_WHITE}Chọn [0-4]: ${UI_NC}"
-    read -r choice
+    choice=$(ui_prompt "Chọn chức năng" "0" "^[0-4]$")
 
     case "$choice" in
     1) start_n8n_service ;;
@@ -106,7 +125,7 @@ control_n8n_service() {
     3) restart_n8n_service ;;
     4) show_n8n_detailed_status ;;
     0) return ;;
-    *) ui_status "error" "Lựa chọn không hợp lệ" ;;
+    *) ui_error "Lựa chọn không hợp lệ" ;;
     esac
 }
 
@@ -115,17 +134,16 @@ control_n8n_service() {
 control_nginx_service() {
     ui_section "Quản lý Nginx Service"
 
-    echo "1) ▶️  Start Nginx"
-    echo "2) ⏹️  Stop Nginx"
-    echo "3) 🔄 Restart Nginx"
-    echo "4) 🔧 Reload Config"
-    echo "5) ✅ Test Config"
-    echo "6) 📊 Status Nginx"
-    echo "0) ⬅️  Quay lại"
+    echo "1) Khởi động Nginx"
+    echo "2) Dừng Nginx"
+    echo "3) Khởi động lại"
+    echo "4) Đọc lại cấu hình (Reload)"
+    echo "5) Kiểm tra file cấu hình"
+    echo "6) Trạng thái chi tiết"
+    echo "0) Quay lại"
     echo ""
 
-    echo -n -e "${UI_WHITE}Chọn [0-6]: ${UI_NC}"
-    read -r choice
+    choice=$(ui_prompt "Chọn chức năng" "0" "^[0-6]$")
 
     case "$choice" in
     1) start_nginx_service ;;
@@ -135,25 +153,28 @@ control_nginx_service() {
     5) test_nginx_config ;;
     6) show_nginx_detailed_status ;;
     0) return ;;
-    *) ui_status "error" "Lựa chọn không hợp lệ" ;;
+    *) ui_error "Lựa chọn không hợp lệ" ;;
     esac
 }
 
 # ===== DATABASE SERVICE CONTROL =====
 
 control_database_service() {
-    ui_section "Quản lý Database Service"
+    ui_section "Quan ly Co so du lieu (PostgreSQL)"
 
-    echo "1) ▶️  Start Database"
-    echo "2) ⏹️  Stop Database"
-    echo "3) 🔄 Restart Database"
-    echo "4) 🔍 Test Connection"
-    echo "5) 📊 Status Database"
-    echo "0) ⬅️  Quay lại"
+    local current_status=$(get_database_status)
+    echo "Trang thai hien tai: $current_status"
     echo ""
 
-    echo -n -e "${UI_WHITE}Chọn [0-5]: ${UI_NC}"
-    read -r choice
+    echo "1) Khoi dong (Start)"
+    echo "2) Dung (Stop)"
+    echo "3) Khoi dong lai (Restart)"
+    echo "4) Kiem tra ket noi"
+    echo "5) Xem trang thai chi tiet"
+    echo "0) Quay lai"
+    echo ""
+
+    choice=$(ui_prompt "Chon chuc nang" "0" "^[0-5]$")
 
     case "$choice" in
     1) start_database_service ;;
@@ -162,125 +183,236 @@ control_database_service() {
     4) test_database_connection ;;
     5) show_database_detailed_status ;;
     0) return ;;
-    *) ui_status "error" "Lựa chọn không hợp lệ" ;;
+    *) ui_error "Lua chon khong hop le" ;;
+    esac
+}
+
+# ===== REDIS SERVICE CONTROL =====
+
+control_redis_service() {
+    ui_section "Quan ly Redis"
+
+    local current_status=$(get_redis_status)
+    echo "Trang thai hien tai: $current_status"
+    echo ""
+
+    echo "1) Khoi dong Redis"
+    echo "2) Dung Redis"
+    echo "3) Khoi dong lai"
+    echo "4) Xoa Cache (Flush)"
+    echo "5) Trang thai chi tiet"
+    echo "6) Thong tin ket noi"
+    echo "0) Quay lai"
+    echo ""
+
+    choice=$(ui_prompt "Chon chuc nang" "0" "^[0-6]$")
+
+    case "$choice" in
+    1) start_redis_service ;;
+    2) stop_redis_service ;;
+    3) restart_redis_service ;;
+    4) flush_redis_cache ;;
+    5) show_redis_detailed_status ;;
+    6) show_redis_connection_info ;;
+    0) return ;;
+    *) ui_error "Lua chon khong hop le" ;;
+    esac
+}
+
+# ===== NOCODB SERVICE CONTROL =====
+
+control_nocodb_service() {
+    if ! is_nocodb_installed 2>/dev/null; then
+        ui_error "NocoDB chua duoc cai dat. Vui long cai dat tu menu chinh."
+        return 1
+    fi
+
+    ui_section "Quan ly NocoDB"
+
+    local current_status=$(get_nocodb_service_status)
+    echo "Trang thai hien tai: $current_status"
+    echo ""
+
+    echo "1) Khoi dong NocoDB"
+    echo "2) Dung NocoDB"
+    echo "3) Khoi dong lai"
+    echo "4) Trang thai chi tiet"
+    echo "5) Thong tin ket noi"
+    echo "0) Quay lai"
+    echo ""
+
+    choice=$(ui_prompt "Chon chuc nang" "0" "^[0-5]$")
+
+    case "$choice" in
+    1) start_nocodb_service ;;
+    2) stop_nocodb_service ;;
+    3) restart_nocodb_service ;;
+    4) show_nocodb_detailed_status ;;
+    5) show_nocodb_connection_info ;;
+    0) return ;;
+    *) ui_error "Lua chon khong hop le" ;;
     esac
 }
 
 # ===== DETAILED STATUS =====
 
 show_detailed_status() {
-    ui_section "Trạng thái Chi tiết"
+    ui_header "Chi tiet He thong"
 
-    # N8N Status
-    echo "═══ N8N ═══"
+    ui_section "Ung dung n8n"
     show_n8n_detailed_status
     echo ""
 
-    # Nginx Status
-    echo "═══ NGINX ═══"
+    ui_section "Cong Nginx"
     show_nginx_detailed_status
     echo ""
 
-    # Database Status
-    echo "═══ DATABASE ═══"
+    ui_section "Co so du lieu (PostgreSQL)"
     show_database_detailed_status
     echo ""
 
-    # System Resources
-    echo "═══ SYSTEM RESOURCES ═══"
-    echo "CPU: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | sed 's/%us,//')"
+    ui_section "Redis (Cache)"
+    show_redis_detailed_status
+    echo ""
+
+    if is_nocodb_installed 2>/dev/null; then
+        ui_section "NocoDB"
+        show_nocodb_detailed_status
+        echo ""
+    fi
+
+    ui_section "Tai nguyen May chu"
+    echo "CPU: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | sed 's/%us,//')% dang su dung"
     echo "RAM: $(free -h | awk '/^Mem:/ {print $3"/"$2}')"
-    echo "Disk: $(df -h / | awk 'NR==2 {print $3"/"$2" ("$5" used)"}')"
+    echo "Dia cung: $(df -h / | awk 'NR==2 {print $3"/"$2" (Da dung "$5")"}')"
 }
 
 # ===== AUTO-START MANAGEMENT =====
 
 manage_auto_start() {
-    ui_section "Cấu hình Auto-start"
+    ui_section "Cau hinh Tu dong khoi dong"
 
-    local n8n_enabled=$(is_n8n_autostart_enabled && echo "✅ Enabled" || echo "❌ Disabled")
-    local nginx_enabled=$(is_nginx_autostart_enabled && echo "✅ Enabled" || echo "❌ Disabled")
-    local db_enabled=$(is_database_autostart_enabled && echo "✅ Enabled" || echo "❌ Disabled")
+    local n8n_enabled=$(is_n8n_autostart_enabled && echo "[OK] Bat" || echo "[STOP] Tat")
+    local nginx_enabled=$(is_nginx_autostart_enabled && echo "[OK] Bat" || echo "[STOP] Tat")
+    local db_enabled=$(is_database_autostart_enabled && echo "[OK] Bat" || echo "[STOP] Tat")
+    local redis_enabled=$(is_redis_autostart_enabled && echo "[OK] Bat" || echo "[STOP] Tat")
+    
+    local nocodb_enabled="N/A"
+    if is_nocodb_installed 2>/dev/null; then
+        nocodb_enabled=$(is_nocodb_autostart_enabled && echo "[OK] Bat" || echo "[STOP] Tat")
+    fi
 
-    echo "Trạng thái Auto-start:"
-    echo "  N8N: $n8n_enabled"
-    echo "  Nginx: $nginx_enabled"
+    echo "CAI DAT HIEN TAI:"
+    echo "  n8n:      $n8n_enabled"
+    echo "  Nginx:    $nginx_enabled"
     echo "  Database: $db_enabled"
+    echo "  Redis:    $redis_enabled"
+    if [[ "$nocodb_enabled" != "N/A" ]]; then
+        echo "  NocoDB:   $nocodb_enabled"
+    fi
     echo ""
 
-    echo "1) 🔧 Toggle N8N auto-start"
-    echo "2) 🔧 Toggle Nginx auto-start"
-    echo "3) 🔧 Toggle Database auto-start"
-    echo "4) ✅ Enable tất cả"
-    echo "5) ❌ Disable tất cả"
-    echo "0) ⬅️  Quay lại"
+    echo "1) Bat/Tat tu dong n8n"
+    echo "2) Bat/Tat tu dong Nginx"
+    echo "3) Bat/Tat tu dong Database"
+    echo "4) Bat/Tat tu dong Redis"
+    if [[ "$nocodb_enabled" != "N/A" ]]; then
+        echo "5) Bat/Tat tu dong NocoDB"
+    fi
+    echo "8) Kich hoat cho tat ca"
+    echo "9) Huy bo cho tat ca"
+    echo "0) Quay lai"
     echo ""
 
-    echo -n -e "${UI_WHITE}Chọn [0-5]: ${UI_NC}"
-    read -r choice
+    choice=$(ui_prompt "Chon [0-9]" "0" "^[0-9]$")
 
     case "$choice" in
     1) toggle_n8n_autostart ;;
     2) toggle_nginx_autostart ;;
     3) toggle_database_autostart ;;
-    4) enable_all_autostart ;;
-    5) disable_all_autostart ;;
+    4) toggle_redis_autostart ;;
+    5) [[ "$nocodb_enabled" != "N/A" ]] && toggle_nocodb_autostart ;;
+    8) 
+        enable_all_autostart || true
+        docker update --restart=unless-stopped n8n-redis >/dev/null 2>&1
+        if is_nocodb_installed 2>/dev/null; then
+            docker update --restart=unless-stopped n8n-nocodb >/dev/null 2>&1
+        fi
+        ui_success "Da bat auto-start cho tat ca"
+        ;;
+    9)
+        disable_all_autostart || true
+        docker update --restart=no n8n-redis >/dev/null 2>&1
+        if is_nocodb_installed 2>/dev/null; then
+            docker update --restart=no n8n-nocodb >/dev/null 2>&1
+        fi
+        ui_success "Da tat auto-start cho tat ca"
+        ;;
     0) return ;;
-    *) ui_status "error" "Lựa chọn không hợp lệ" ;;
+    *) ui_error "Lua chon khong hop le" ;;
     esac
 }
 
 # ===== RESTART ALL SERVICES =====
 
 restart_all_services() {
-    ui_section "Restart Tất cả Dịch vụ"
+    ui_header "Khoi dong lai toan bo"
 
-    ui_warning_box "Cảnh báo" \
-        "Sẽ restart tất cả dịch vụ theo thứ tự an toàn" \
-        "N8N sẽ tạm thời không khả dụng"
+    ui_warning_box "XAC NHAN KHOI DONG LAI" \
+        "He thong se dung va bat lai tat ca cac thanh phan." \
+        "Dieu nay co the gay gian doan cac workflow dang chay."
 
-    if ! ui_confirm "Tiếp tục restart tất cả?"; then
+    if ! ui_confirm "Ban chac chan muon tiep tuc?"; then
         return
     fi
 
-    # Stop services in reverse order
-    ui_status "info" "Dừng dịch vụ..."
+    ui_info "Dang dung cac dich vu..."
     stop_n8n_service
-    sleep 2
+    cd "$N8N_COMPOSE_DIR" && docker compose stop nocodb redis 2>/dev/null || true
+    sleep 1
 
-    # Start services in correct order
-    ui_status "info" "Khởi động dịch vụ..."
+    ui_info "Dang khoi dong lai dich vu nen..."
     start_database_service
-    sleep 3
-    start_nginx_service
+    cd "$N8N_COMPOSE_DIR" && docker compose up -d redis 2>/dev/null || true
+    if is_nocodb_installed 2>/dev/null; then
+        cd "$N8N_COMPOSE_DIR" && docker compose up -d nocodb 2>/dev/null || true
+    fi
+    
     sleep 2
+    ui_info "Dang khoi dong Web server va N8N..."
+    start_nginx_service
     start_n8n_service
 
-    ui_status "success" "Đã restart tất cả dịch vụ"
+    ui_success "Toan bo dich vu da duoc khoi dong lai"
 }
 
 # ===== LOG MANAGEMENT =====
 
 check_service_logs() {
-    ui_section "Xem Service Logs"
+    ui_header "Nhat ky he thong"
 
-    echo "1) 📝 N8N Logs"
-    echo "2) 📝 Nginx Logs"
-    echo "3) 📝 Database Logs"
-    echo "4) 📝 System Logs"
-    echo "0) ⬅️  Quay lại"
+    echo "1) N8N"
+    echo "2) Nginx"
+    echo "3) PostgreSQL"
+    echo "4) Redis"
+    if is_nocodb_installed 2>/dev/null; then
+        echo "5) NocoDB"
+    fi
+    echo "6) He thong chung"
+    echo "0) Quay lai"
     echo ""
 
-    echo -n -e "${UI_WHITE}Chọn [0-4]: ${UI_NC}"
-    read -r choice
+    choice=$(ui_prompt "Chon dich vu" "0" "^[0-6]$")
 
     case "$choice" in
     1) show_n8n_logs ;;
     2) show_nginx_logs ;;
     3) show_database_logs ;;
-    4) show_system_logs ;;
+    4) show_redis_logs ;;
+    5) is_nocodb_installed 2>/dev/null && show_nocodb_logs ;;
+    6) show_system_logs ;;
     0) return ;;
-    *) ui_status "error" "Lựa chọn không hợp lệ" ;;
+    *) ui_error "Lua chon khong hop le" ;;
     esac
 }
 
@@ -289,16 +421,16 @@ check_service_logs() {
 configure_service_dependencies() {
     ui_section "Cấu hình Service Dependencies"
 
-    echo "📋 Thứ tự khởi động hiện tại:"
+    echo " Thứ tự khởi động hiện tại:"
     echo "  1. Database (PostgreSQL)"
     echo "  2. Nginx"
     echo "  3. N8N"
     echo ""
 
-    echo "1) 🔍 Kiểm tra Dependencies"
-    echo "2) 🔧 Sửa Dependencies"
-    echo "3) ✅ Test Boot Sequence"
-    echo "0) ⬅️  Quay lại"
+    echo "1)  Kiểm tra Dependencies"
+    echo "2)  Sửa Dependencies"
+    echo "3) [OK] Test Boot Sequence"
+    echo "0)   Quay lại"
     echo ""
 
     echo -n -e "${UI_WHITE}Chọn [0-3]: ${UI_NC}"

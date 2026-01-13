@@ -23,16 +23,21 @@ readonly UI_CYAN='\033[0;36m'
 readonly UI_WHITE='\033[1;37m'
 readonly UI_GRAY='\033[0;37m'
 readonly UI_NC='\033[0m'
+readonly UI_BOLD='\033[1m'
+readonly UI_DIM='\033[2m'
+readonly UI_ITALIC='\033[3m'
+readonly UI_UNDERLINE='\033[4m'
 
 # Unicode characters for enhanced UI
-readonly UI_CHECK="✅"
-readonly UI_CROSS="❌"
-readonly UI_WARNING="⚠️"
-readonly UI_INFO="ℹ️"
-readonly UI_ROCKET="🚀"
-readonly UI_GEAR="⚙️"
-readonly UI_CLOUD="☁️"
-readonly UI_LOCK="🔒"
+# Unicode characters - Disabled for clean look
+readonly UI_CHECK="[OK]"
+readonly UI_CROSS="[FAIL]"
+readonly UI_WARNING="[WARN]"
+readonly UI_INFO="[INFO]"
+readonly UI_ROCKET=""
+readonly UI_GEAR=""
+readonly UI_CLOUD=""
+readonly UI_LOCK=""
 
 # Global spinner PID
 UI_SPINNER_PID=0
@@ -42,7 +47,7 @@ UI_SPINNER_PID=0
 # Advanced spinner with Unicode characters
 _ui_spinner() {
     local message="$1"
-    local spin_chars=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    local spin_chars=('|' '/' '-' '\')
     local i=0
     
     tput civis # Hide cursor
@@ -93,8 +98,8 @@ ui_show_progress() {
     local empty=$((width - filled))
     
     local bar=""
-    for ((i=0; i<filled; i++)); do bar+="█"; done
-    for ((i=0; i<empty; i++)); do bar+="░"; done
+    for ((i=0; i<filled; i++)); do bar+="#"; done
+    for ((i=0; i<empty; i++)); do bar+="-"; done
     
     echo -e "\r${UI_CYAN}[$bar] ${percentage}% ${message}${UI_NC}"
 }
@@ -111,17 +116,15 @@ declare -a UI_PROGRESS_STATUS=()
 
 ui_progress_start() {
     local title="$1"
-    local total="$2"
     
     UI_PROGRESS_TITLE="$title"
-    UI_PROGRESS_TOTAL="$total"
+    UI_PROGRESS_TOTAL="$2"
     UI_PROGRESS_STEPS=()
     UI_PROGRESS_STATUS=()
     
     echo ""
-    echo -e "${UI_CYAN}╭─────────────────────────────────────────╮${UI_NC}"
-    echo -e "${UI_CYAN}│  $title${UI_NC}"
-    echo -e "${UI_CYAN}├─────────────────────────────────────────┤${UI_NC}"
+    echo -e "${UI_BOLD}${UI_CYAN}$title${UI_NC}"
+    echo -e "${UI_CYAN}$(printf '─%.0s' $(seq 1 40))${UI_NC}"
 }
 
 ui_progress_update() {
@@ -138,38 +141,38 @@ ui_progress_update() {
     local empty=$((bar_width - filled))
     
     local bar=""
-    for ((i=0; i<filled; i++)); do bar+="█"; done
-    for ((i=0; i<empty; i++)); do bar+="░"; done
+    for ((i=0; i<filled; i++)); do bar+="#"; done
+    for ((i=0; i<empty; i++)); do bar+="-"; done
     
     # Clear previous progress line
     echo -ne "\r\033[K"
     
     # Show progress bar
-    echo -e "${UI_CYAN}│  [${bar}] ${percentage}% (${step}/${UI_PROGRESS_TOTAL})${UI_NC}"
+    echo -e "${UI_CYAN}[${bar}] ${percentage}% (${step}/${UI_PROGRESS_TOTAL})${UI_NC}"
     
     # Show step status
-    local icon="⏳"
+    local icon="-"
     local color="$UI_GRAY"
     case "$status" in
         "success")
-            icon="✅"
+            icon="+"
             color="$UI_GREEN"
             ;;
         "error")
-            icon="❌"
+            icon="!"
             color="$UI_RED"
             ;;
         "running")
-            icon="🔄"
+            icon=">"
             color="$UI_CYAN"
             ;;
     esac
     
-    echo -e "${color}│  ${icon} Step ${step}: $step_name${UI_NC}"
+    echo -e "${color}${icon} Step ${step}: $step_name${UI_NC}"
 }
 
 ui_progress_end() {
-    echo -e "${UI_CYAN}╰─────────────────────────────────────────╯${UI_NC}"
+    echo -e "${UI_CYAN}$(printf '─%.0s' $(seq 1 40))${UI_NC}"
     echo ""
     
     # Reset
@@ -281,33 +284,30 @@ ui_select() {
 # Unified UI functions that replace both ui_status() and log_* functions
 # These functions automatically log to file if logger is available
 
-# Unified info message
 ui_info() {
     local message="$1"
     local silent="${2:-false}"
     
     echo -e "${UI_BLUE}${UI_INFO} $message${UI_NC}"
     
-    # Auto-log if logger available
+    # Log to file only if logger available
     if [[ "${LOGGER_LOADED:-}" == "true" ]] && [[ "$silent" != "true" ]]; then
-        log_info "$message" 2>/dev/null || true
+        write_log "INFO" "$message" 2>/dev/null || true
     fi
 }
 
-# Unified success message
 ui_success() {
     local message="$1"
     local silent="${2:-false}"
     
     echo -e "${UI_GREEN}${UI_CHECK} $message${UI_NC}"
     
-    # Auto-log if logger available
+    # Log to file only if logger available
     if [[ "${LOGGER_LOADED:-}" == "true" ]] && [[ "$silent" != "true" ]]; then
-        log_success "$message" 2>/dev/null || true
+        write_log "SUCCESS" "$message" 2>/dev/null || true
     fi
 }
 
-# Unified error message
 ui_error() {
     local message="$1"
     local error_code="${2:-}"
@@ -316,32 +316,23 @@ ui_error() {
     
     echo -e "${UI_RED}${UI_CROSS} $message${UI_NC}" >&2
     
-    # Show error code if provided
-    if [[ -n "$error_code" ]]; then
-        echo -e "${UI_GRAY}   Code: $error_code${UI_NC}" >&2
-    fi
-    
-    # Show suggestions if provided
-    if [[ -n "$suggestions" ]]; then
-        echo -e "${UI_YELLOW}   💡 $suggestions${UI_NC}" >&2
-    fi
-    
-    # Auto-log if logger available
+    # Log to file only if logger available
     if [[ "${LOGGER_LOADED:-}" == "true" ]] && [[ "$silent" != "true" ]]; then
-        log_error "$message" 2>/dev/null || true
+        write_log "ERROR" "$message" 2>/dev/null || true
     fi
+    
+    [[ -n "$suggestions" ]] && echo -e "  Gợi ý: $suggestions" >&2
 }
 
-# Unified warning message
 ui_warning() {
     local message="$1"
     local silent="${2:-false}"
     
     echo -e "${UI_YELLOW}${UI_WARNING} $message${UI_NC}" >&2
     
-    # Auto-log if logger available
+    # Log to file only if logger available
     if [[ "${LOGGER_LOADED:-}" == "true" ]] && [[ "$silent" != "true" ]]; then
-        log_warn "$message" 2>/dev/null || true
+        write_log "WARN" "$message" 2>/dev/null || true
     fi
 }
 
@@ -415,53 +406,55 @@ ui_run_command() {
 
 # ===== ADVANCED UI COMPONENTS =====
 
-# Display header
+# Display header simple
 ui_header() {
     local title="$1"
-    local width=60
-    local padding=$(( (width - ${#title}) / 2 ))
+    local version="${2:-""}"
     
-    echo -e "${UI_CYAN}╭$(printf '─%.0s' $(seq 1 $((width-2))))╮${UI_NC}"
-    echo -e "${UI_CYAN}│$(printf ' %.0s' $(seq 1 $padding))$title$(printf ' %.0s' $(seq 1 $((width-2-padding-${#title}))))│${UI_NC}"
-    echo -e "${UI_CYAN}╰$(printf '─%.0s' $(seq 1 $((width-2))))╯${UI_NC}"
+    clear
+    echo -e "${UI_BOLD}${UI_CYAN}>>> $title${UI_NC}"
+    if [[ -n "$version" ]]; then
+        echo -e "${UI_GRAY}    Phiên bản: $version${UI_NC}"
+    fi
+    echo -e "${UI_CYAN}$(printf '═%.0s' $(seq 1 60))${UI_NC}"
     echo ""
 }
 
-# Display section
+# Display section simple
 ui_section() {
     local title="$1"
     echo ""
-    echo -e "${UI_WHITE}═══ $title ═══${UI_NC}"
+    echo -e "${UI_BOLD}${UI_WHITE}[ $title ]${UI_NC}"
     echo ""
 }
 
-# Display info box
+# Display info without box
 ui_info_box() {
     local title="$1"
     shift
     local lines=("$@")
     
-    echo -e "${UI_BLUE}┌─ $title ─┐${UI_NC}"
+    echo -e "${UI_BOLD}${UI_BLUE}# $title${UI_NC}"
     for line in "${lines[@]}"; do
-        echo -e "${UI_BLUE}│${UI_NC} $line"
+        echo -e "  $line"
     done
-    echo -e "${UI_BLUE}└$(printf '─%.0s' $(seq 1 $((${#title}+3))))┘${UI_NC}"
+    echo ""
 }
 
-# Display warning box
+# Display warning without box
 ui_warning_box() {
     local title="$1"
     shift
     local lines=("$@")
     
-    echo -e "${UI_YELLOW}┌─ ${UI_WARNING} $title ─┐${UI_NC}"
+    echo -e "${UI_BOLD}${UI_YELLOW}# $title${UI_NC}"
     for line in "${lines[@]}"; do
-        echo -e "${UI_YELLOW}│${UI_NC} $line"
+        echo -e "  $line"
     done
-    echo -e "${UI_YELLOW}└$(printf '─%.0s' $(seq 1 $((${#title}+5))))┘${UI_NC}"
+    echo ""
 }
 
-# Display error box with suggestions
+# Display error without box
 ui_error_box() {
     local title="$1"
     local error_code="${2:-}"
@@ -469,22 +462,20 @@ ui_error_box() {
     shift 3
     local suggestions=("$@")
     
-    echo -e "${UI_RED}┌─ ${UI_CROSS} $title ─┐${UI_NC}"
-    echo -e "${UI_RED}│${UI_NC} $error_message"
+    echo -e "${UI_BOLD}${UI_RED}!!! $title${UI_NC}"
+    echo -e "    $error_message"
     
     if [[ -n "$error_code" ]]; then
-        echo -e "${UI_RED}│${UI_NC} ${UI_GRAY}Code: $error_code${UI_NC}"
+        echo -e "    ${UI_GRAY}Code: $error_code${UI_NC}"
     fi
     
     if [[ ${#suggestions[@]} -gt 0 ]]; then
-        echo -e "${UI_RED}│${UI_NC}"
-        echo -e "${UI_RED}│${UI_NC} ${UI_YELLOW}💡 Suggestions:${UI_NC}"
+        echo -e "    ${UI_YELLOW}Gợi ý:${UI_NC}"
         for suggestion in "${suggestions[@]}"; do
-            echo -e "${UI_RED}│${UI_NC}   • $suggestion"
+            echo -e "    - $suggestion"
         done
     fi
-    
-    echo -e "${UI_RED}└$(printf '─%.0s' $(seq 1 $((${#title}+5))))┘${UI_NC}"
+    echo ""
 }
 
 # ===== VALIDATION HELPERS =====
@@ -526,24 +517,20 @@ ui_validate_port() {
 
 # ===== TABLE FORMATTING =====
 
-# Print table with headers and rows
-# Usage: ui_table "Header1|Header2|Header3" "Row1Col1|Row1Col2|Row1Col3" "Row2Col1|Row2Col2|Row2Col3"
+# Print table without ASCII borders
 ui_table() {
     local headers="$1"
     shift
     local rows=("$@")
     
-    # Parse headers
     IFS='|' read -ra HEADER_ARRAY <<< "$headers"
     local col_count=${#HEADER_ARRAY[@]}
     
-    # Calculate column widths
     declare -a col_widths
     for i in "${!HEADER_ARRAY[@]}"; do
         col_widths[$i]=${#HEADER_ARRAY[$i]}
     done
     
-    # Check rows for max widths
     for row in "${rows[@]}"; do
         IFS='|' read -ra ROW_ARRAY <<< "$row"
         for i in "${!ROW_ARRAY[@]}"; do
@@ -553,61 +540,29 @@ ui_table() {
         done
     done
     
-    # Add padding
+    # Add minimal padding
     for i in "${!col_widths[@]}"; do
         col_widths[$i]=$((col_widths[$i] + 2))
     done
     
     # Print header
-    local header_line="┌"
-    for i in "${!col_widths[@]}"; do
-        header_line+=$(printf '─%.0s' $(seq 1 ${col_widths[$i]}))
-        if [[ $i -lt $((${#col_widths[@]} - 1)) ]]; then
-            header_line+="┬"
-        fi
-    done
-    header_line+="┐"
-    echo -e "${UI_CYAN}$header_line${UI_NC}"
-    
-    # Print header row
-    echo -ne "${UI_CYAN}│${UI_NC}"
+    echo -e "${UI_DIM}${UI_CYAN}$(printf '%.0s─' $(seq 1 40))${UI_NC}"
     for i in "${!HEADER_ARRAY[@]}"; do
-        printf " %-${col_widths[$i]}s${UI_CYAN}│${UI_NC}" "${HEADER_ARRAY[$i]}"
+        printf "${UI_CYAN}%-${col_widths[$i]}s${UI_NC} " "${HEADER_ARRAY[$i]}"
     done
     echo ""
-    
-    # Print separator
-    local sep_line="├"
-    for i in "${!col_widths[@]}"; do
-        sep_line+=$(printf '─%.0s' $(seq 1 ${col_widths[$i]}))
-        if [[ $i -lt $((${#col_widths[@]} - 1)) ]]; then
-            sep_line+="┼"
-        fi
-    done
-    sep_line+="┤"
-    echo -e "${UI_CYAN}$sep_line${UI_NC}"
+    echo -e "${UI_DIM}${UI_CYAN}$(printf '%.0s─' $(seq 1 40))${UI_NC}"
     
     # Print data rows
     for row in "${rows[@]}"; do
         IFS='|' read -ra ROW_ARRAY <<< "$row"
-        echo -ne "${UI_WHITE}│${UI_NC}"
         for i in "${!ROW_ARRAY[@]}"; do
             local cell_value="${ROW_ARRAY[$i]:-}"
-            printf " %-${col_widths[$i]}s${UI_WHITE}│${UI_NC}" "$cell_value"
+            printf "%-${col_widths[$i]}s " "$cell_value"
         done
         echo ""
     done
-    
-    # Print footer
-    local footer_line="└"
-    for i in "${!col_widths[@]}"; do
-        footer_line+=$(printf '─%.0s' $(seq 1 ${col_widths[$i]}))
-        if [[ $i -lt $((${#col_widths[@]} - 1)) ]]; then
-            footer_line+="┴"
-        fi
-    done
-    footer_line+="┘"
-    echo -e "${UI_CYAN}$footer_line${UI_NC}"
+    echo -e "${UI_DIM}${UI_CYAN}$(printf '%.0s─' $(seq 1 40))${UI_NC}"
 }
 
 # ===== CLEANUP ON EXIT =====

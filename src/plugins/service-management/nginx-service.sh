@@ -8,9 +8,9 @@ set -euo pipefail
 
 get_nginx_status() {
     if systemctl is-active --quiet nginx 2>/dev/null; then
-        echo -e "${UI_GREEN}🟢 Running${UI_NC}"
+        echo -e "${UI_GREEN}[OK] Đang chạy${UI_NC}"
     else
-        echo -e "${UI_RED}🔴 Stopped${UI_NC}"
+        echo -e "${UI_RED}[STOP] Đã dừng${UI_NC}"
     fi
 }
 
@@ -24,7 +24,7 @@ show_nginx_detailed_status() {
 
 start_nginx_service() {
     ui_run_command "Khởi động Nginx" "systemctl start nginx"
-    ui_status "success" "Nginx đã khởi động"
+    ui_success "Cổng Nginx đã được kích hoạt"
 }
 
 stop_nginx_service() {
@@ -43,10 +43,11 @@ reload_nginx_config() {
 }
 
 test_nginx_config() {
+    ui_info "Đang kiểm tra tệp cấu hình Nginx..."
     if nginx -t 2>/dev/null; then
-        ui_status "success" "Nginx config hợp lệ"
+        ui_success "Cấu hình hợp lệ"
     else
-        ui_status "error" "Nginx config có lỗi"
+        ui_error "Cấu hình có lỗi, vui lòng kiểm tra lại"
         nginx -t
     fi
 }

@@ -12,9 +12,9 @@ fi
 
 get_database_status() {
     if docker ps --format '{{.Names}}' | grep -q "postgres"; then
-        echo -e "${UI_GREEN}🟢 Running${UI_NC}"
+        echo -e "${UI_GREEN}[OK] Đang chạy${UI_NC}"
     else
-        echo -e "${UI_RED}🔴 Stopped${UI_NC}"
+        echo -e "${UI_RED}[STOP] Đã dừng${UI_NC}"
     fi
 }
 
@@ -28,9 +28,9 @@ show_database_detailed_status() {
 
         # Test connection
         if test_database_connection_silent; then
-            echo "Connection: ✅ OK"
+            echo "Connection: [OK] OK"
         else
-            echo "Connection: ❌ Failed"
+            echo "Connection: [FAIL] Failed"
         fi
     else
         echo "Database container không chạy"
@@ -38,15 +38,15 @@ show_database_detailed_status() {
 }
 
 start_database_service() {
-    ui_run_command "Khởi động Database" "
+    ui_run_command "Khởi động Cơ sở dữ liệu" "
         cd $N8N_COMPOSE_DIR && docker compose up -d postgres
     "
 
-    sleep 5
+    sleep 3
     if test_database_connection_silent; then
-        ui_status "success" "Database đã khởi động"
+        ui_success "Cơ sở dữ liệu đã sẵn sàng"
     else
-        ui_status "warning" "Database khởi động nhưng chưa sẵn sàng"
+        ui_warning "Cơ sở dữ liệu đang khởi động..."
     fi
 }
 
@@ -77,19 +77,19 @@ restart_database_service() {
 }
 
 test_database_connection() {
-    echo "🔍 Testing database connection..."
+    ui_info "Đang kiểm tra kết nối cơ sở dữ liệu..."
 
     if test_database_connection_silent; then
-        ui_status "success" "Database connection OK"
+        ui_success "Kết nối thành công"
 
         # Show additional info
         local db_size=$(docker exec n8n-postgres psql -U n8n -d n8n -c "SELECT pg_size_pretty(pg_database_size('n8n'));" -t 2>/dev/null | xargs)
         local table_count=$(docker exec n8n-postgres psql -U n8n -d n8n -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" -t 2>/dev/null | xargs)
 
-        echo "Database size: ${db_size:-Unknown}"
-        echo "Tables: ${table_count:-Unknown}"
+        echo "Dung lượng: ${db_size:-Không rõ}"
+        echo "Số lượng bảng: ${table_count:-Không rõ}"
     else
-        ui_status "error" "Database connection failed"
+        ui_error "Lỗi: Không thể kết nối với cơ sở dữ liệu"
     fi
 }
 
@@ -156,7 +156,7 @@ check_service_dependencies() {
     ui_status "info" "Kiểm tra service dependencies..."
 
     echo "Database → Nginx → N8N"
-    echo "✅ Thứ tự đúng cho Docker Compose"
+    echo "[OK] Thứ tự đúng cho Docker Compose"
     ui_status "success" "Dependencies OK"
 }
 

@@ -11,10 +11,9 @@ set -euo pipefail
 get_current_n8n_version() {
     local version=""
 
-    # Method 1: From running container (most accurate)
-    if docker ps --format '{{.Names}}' | grep -q "n8n"; then
-        local container_name=$(docker ps --format '{{.Names}}' | grep "n8n" | head -1)
-        version=$(docker exec "$container_name" n8n --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    # Method 1: From running container (most accurate) - tìm chính xác container 'n8n'
+    if docker ps --format '{{.Names}}' | grep -q "^n8n$"; then
+        version=$(docker exec n8n n8n --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
         if [[ -n "$version" ]]; then
             echo "$version"
             return 0
@@ -32,7 +31,7 @@ get_current_n8n_version() {
     fi
 
     # Method 3: From image tag
-    if docker ps --format '{{.Names}}' | grep -q "n8n"; then
+    if docker ps --format '{{.Names}}' | grep -q "^n8n$"; then
         version=$(docker inspect n8n --format '{{.Config.Image}}' 2>/dev/null | cut -d':' -f2)
         if [[ -n "$version" && "$version" != "latest" ]]; then
             echo "$version"
@@ -67,34 +66,26 @@ get_available_versions() {
 }
 
 show_available_versions() {
-    ui_section "Các phiên bản N8N có sẵn"
+    ui_section "Danh sach phien ban"
 
-    ui_start_spinner "Lấy danh sách phiên bản từ DockerHub"
-    local versions=($(get_available_versions 15))
+    ui_start_spinner "Dang lay danh sach..."
+    local versions=($(get_available_versions 10))
     ui_stop_spinner
 
     if [[ ${#versions[@]} -eq 0 ]]; then
-        ui_status "error" "Không thể lấy danh sách phiên bản"
-
-        # Show fallback versions
-        echo "📋 Một số phiên bản phổ biến:"
-        echo "   1. 1.99.1"
-        echo "   2. 1.99.0"
-        echo "   3. 1.98.2"
-        echo "   4. latest"
+        ui_error "Khong the lay danh sach phien ban"
         return 1
     fi
 
-    echo "📋 ${#versions[@]} phiên bản mới nhất:"
     for i in "${!versions[@]}"; do
         local version="${versions[$i]}"
         local status=""
 
         if [[ "$version" == "$CURRENT_VERSION" ]]; then
-            status=" ${UI_GREEN}(hiện tại)${UI_NC}"
+            status=" (hien tai)"
         fi
 
-        echo "   $((i + 1)). $version$status"
+        echo "  $((i + 1)). v$version$status"
     done
     echo ""
 }
@@ -147,28 +138,24 @@ check_breaking_changes() {
     local from_version="$1"
     local to_version="$2"
 
-    ui_section "Kiểm tra breaking changes"
-
     # Known breaking changes (can be expanded)
     local breaking_versions=("1.0.0" "0.200.0" "0.190.0")
     local has_breaking=false
 
     for breaking_ver in "${breaking_versions[@]}"; do
         if is_version_in_range "$from_version" "$to_version" "$breaking_ver"; then
-            ui_status "warning" "⚠️  Breaking change ở v$breaking_ver"
+            ui_warning "Luu y: Co thay doi quan trong o v$breaking_ver"
             has_breaking=true
         fi
     done
 
     if [[ "$has_breaking" == "true" ]]; then
-        ui_warning_box "Cảnh báo Breaking Changes" \
-            "Phiên bản này có thể không tương thích ngược" \
-            "Khuyến nghị backup đầy đủ trước khi nâng cấp" \
-            "Kiểm tra workflows sau khi upgrade"
-
-        return $(ui_confirm "Tiếp tục với rủi ro breaking changes?")
+        echo ""
+        echo "LUU Y: Phien ban nay co thay doi lon."
+        echo "Hay dam bao da sao luu du lieu truoc."
+        echo ""
+        return $(ui_confirm "Ban van muon nang cap?")
     else
-        ui_status "success" "Không có breaking changes đã biết"
         return 0
     fi
 }
@@ -197,9 +184,9 @@ get_release_info() {
             local release_date=$(jq -r '.published_at' "$temp_file" | cut -d'T' -f1)
             local release_notes=$(jq -r '.body' "$temp_file" | head -n 5)
 
-            echo "📅 Ngày phát hành: $release_date"
-            echo "📝 Release notes (5 dòng đầu):"
-            echo "$release_notes" | sed 's/^/   /'
+            echo "Ngay phat hanh: $release_date"
+            echo "Ghi chu:"
+            echo "$release_notes" | sed 's/^/  /'
 
             rm -f "$temp_file"
             return 0
@@ -207,7 +194,7 @@ get_release_info() {
     fi
 
     rm -f "$temp_file"
-    echo "ℹ️  Không có thông tin release cho v$version"
+    echo "  Không có thông tin release cho v$version"
     return 1
 }
 
@@ -228,10 +215,9 @@ validate_version_exists() {
     ui_stop_spinner
 
     if [[ "$status_code" == "200" ]]; then
-        ui_status "success" "Phiên bản $version tồn tại"
         return 0
     else
-        ui_status "error" "Phiên bản $version không tồn tại"
+        ui_error "Phiên bản $version không được tìm thấy"
         return 1
     fi
 }

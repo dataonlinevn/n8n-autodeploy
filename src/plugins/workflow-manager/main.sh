@@ -8,7 +8,7 @@ set -euo pipefail
 
 # Source core modules
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$PLUGIN_DIR")")"
+PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$(dirname "$PLUGIN_DIR")")")"
 
 [[ -z "${LOGGER_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/logger.sh"
 [[ -z "${CONFIG_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/config.sh"
@@ -17,10 +17,10 @@ PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$PLUGIN_DIR")")"
 [[ -z "${SPINNER_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/spinner.sh"
 
 # Constants
-readonly WORKFLOW_MANAGER_LOADED=true
-readonly N8N_API_BASE="http://localhost:5678/api/v1"
-readonly N8N_API_KEY_FILE="/opt/n8n/.n8n-api-key"
-readonly GDRIVE_FOLDER="n8n-workflows"
+[[ -z "${WORKFLOW_MANAGER_LOADED:-}" ]] && readonly WORKFLOW_MANAGER_LOADED=true
+[[ -z "${N8N_API_BASE:-}" ]] && readonly N8N_API_BASE="http://localhost:5678/api/v1"
+[[ -z "${N8N_API_KEY_FILE:-}" ]] && readonly N8N_API_KEY_FILE="/opt/n8n/.n8n-api-key"
+[[ -z "${GDRIVE_FOLDER:-}" ]] && readonly GDRIVE_FOLDER="n8n-workflows"
 
 # Global variables
 N8N_API_KEY=""
@@ -56,15 +56,16 @@ workflow_manager_main() {
 show_simple_menu() {
     local workflow_count=$(get_workflow_count)
     
+    ui_section "Trạng thái hệ thống"
+    echo "Tổng số kịch bản: $workflow_count"
     echo ""
-    echo "📊 **Workflows hiện tại:** $workflow_count"
+    
+    echo "CHỨC NĂNG QUẢN LÝ"
+    echo "  1) Danh sách kịch bản (Workflows)"
+    echo "  2) Xuất kịch bản (Export to Drive)"
+    echo "  3) Nhập kịch bản (Import from Drive)"
     echo ""
-    echo "🔄 QUẢN LÝ WORKFLOWS"
-    echo ""
-    echo "1) 📋 Danh sách workflows"
-    echo "2) 📤 Export workflows"
-    echo "3) 📥 Import workflows"
-    echo "0) ⬅️  Quay lại"
+    echo "  0) Quay lại"
     echo ""
 }
 
@@ -92,13 +93,8 @@ setup_prerequisites() {
 
     # Test API
     if ! make_api_call "GET" "workflows" >/dev/null; then
-        ui_status "error" "N8N API không hoạt động"
+        ui_error "Không thể kết nối với n8n API. Vui lòng kiểm tra lại API Key."
         return 1
-    fi
-
-    # Check Google Drive
-    if ! check_gdrive; then
-        ui_status "warning" "Google Drive chưa setup"
     fi
 
     return 0
@@ -148,9 +144,10 @@ check_gdrive() {
 }
 
 get_gdrive_remote_name() {
-    local RCLONE_CONFIG="${HOME}/.config/rclone/rclone.conf"
+    # Su dung global RCLONE_CONFIG neu co, neu khong dung mac dinh
+    local config_check="${RCLONE_CONFIG:-${HOME}/.config/rclone/rclone.conf}"
     
-    if [[ ! -f "$RCLONE_CONFIG" ]]; then
+    if [[ ! -f "$config_check" ]]; then
         return 1
     fi
     
@@ -211,36 +208,33 @@ get_gdrive_remote() {
 # ===== LIST WORKFLOWS =====
 
 list_workflows() {
-    ui_section "Danh sách Workflows"
+    ui_section "Danh sách Kịch bản (Workflows)"
     
-    ui_start_spinner "Lấy danh sách workflows"
+    ui_start_spinner "Đang tải danh sách..."
     local workflows=$(make_api_call "GET" "workflows")
     ui_stop_spinner
     
     if ! echo "$workflows" | jq -e '.data' >/dev/null 2>&1; then
-        ui_status "error" "Không thể lấy danh sách workflows"
+        ui_error "Lỗi lấy dữ liệu từ n8n"
         return 1
     fi
     
-    echo "📋 **N8N Workflows:**"
     echo ""
-    printf "%-20s %-30s %-15s %-15s\n" "ID" "Name" "Status" "Updated"
+    printf "%-10s %-40s %-15s\n" "ID" "Tên Kịch Bản" "Trạng Thái"
     echo "────────────────────────────────────────────────────────────────────────────"
     
     echo "$workflows" | jq -r '.data[] | @json' | while read -r workflow_json; do
         local id=$(echo "$workflow_json" | jq -r '.id')
         local name=$(echo "$workflow_json" | jq -r '.name')
         local active=$(echo "$workflow_json" | jq -r '.active')
-        local updated=$(echo "$workflow_json" | jq -r '.updatedAt')
         
-        local status=$([ "$active" = "true" ] && echo "🟢 Active" || echo "🔴 Inactive")
-        local date=$(echo "$updated" | cut -d'T' -f1)
+        local status=$([ "$active" = "true" ] && echo "Đang chạy" || echo "Đã dừng")
         
-        printf "%-20s %-30s %-15s %-15s\n" "${id:0:18}" "${name:0:28}" "$status" "$date"
+        printf "%-10s %-40s %-15s\n" "${id:0:8}" "${name:0:38}" "$status"
     done
     
     echo ""
-    echo "📊 Total: $(echo "$workflows" | jq '.data | length') workflows"
+    ui_info "Tổng cộng: $(echo "$workflows" | jq '.data | length') kịch bản."
 }
 
 # ===== EXPORT =====
@@ -271,12 +265,14 @@ export_menu() {
 }
 
 export_all_workflows() {
-    set +e  # Disable exit on error temporarily
+    set +e
     
+    ui_start_spinner "Đang chuẩn bị dữ liệu kịch bản..."
     local workflows=$(make_api_call "GET" "workflows")
     
     if ! echo "$workflows" | jq -e '.data' >/dev/null 2>&1; then
-        ui_status "error" "Không thể lấy workflows"
+        ui_stop_spinner
+        ui_error "Không thể lấy dữ liệu từ n8n"
         set -e
         return 1
     fi
@@ -284,86 +280,61 @@ export_all_workflows() {
     local temp_dir="/tmp/n8n_export_$(date +%s)"
     mkdir -p "$temp_dir"
     
-    # Export workflows
     local count=0
     local workflow_ids=($(echo "$workflows" | jq -r '.data[].id'))
     
-    echo "🔄 Exporting ${#workflow_ids[@]} workflows..."
     for id in "${workflow_ids[@]}"; do
         local workflow_data=$(echo "$workflows" | jq -r ".data[] | select(.id==\"$id\")")
         local name=$(echo "$workflow_data" | jq -r '.name' | sed 's/[^a-zA-Z0-9_-]/_/g')
-        
         echo "$workflow_data" > "$temp_dir/${name}_${id}.json"
-        echo "✅ Exported: $name"
         count=$((count + 1))
     done
+    ui_stop_spinner
     
-    echo ""
-    echo "📊 Total exported: $count workflows"
-    echo "📁 Temp directory: $temp_dir"
-
-    # Auto-detect remote name
-    echo "☁️  Starting Google Drive upload..."
-    
+    ui_start_spinner "Đang tải $count kịch bản lên Google Drive..."
     local remote_name
     if ! remote_name=$(get_gdrive_remote_name); then
-        echo "❌ Không tìm thấy Google Drive remote"
+        ui_stop_spinner
+        ui_error "Không tìm thấy kết nối Google Drive"
         set -e
         return 1
     fi
     
-    echo "✅ Detected remote: $remote_name"
-    
-    # Test connection
-    if rclone lsd "$remote_name:" >/dev/null 2>&1; then
-        echo "✅ Google Drive connection OK"
-    else
-        echo "❌ Google Drive connection failed"
-        set -e
-        return 1
-    fi
-    
-    # Create folder and upload
     rclone mkdir "$remote_name:n8n-workflows" 2>/dev/null || true
     
-    echo "📤 Uploading to Google Drive..."
-    if rclone copy "$temp_dir/" "$remote_name:n8n-workflows/" --include "*.json" --progress; then
-        echo "✅ Upload successful!"
-        
-        # Verify
-        local uploaded=$(rclone ls "$remote_name:n8n-workflows/" --include "*.json" | wc -l)
-        echo "📊 Files on Drive: $uploaded"
+    if rclone copy "$temp_dir/" "$remote_name:n8n-workflows/" --include "*.json" >/dev/null 2>&1; then
+        ui_stop_spinner
+        ui_success "Đã sao lưu $count kịch bản lên Google Drive thành công."
     else
-        echo "❌ Upload failed"
+        ui_stop_spinner
+        ui_error "Lỗi tải dữ liệu lên Google Drive"
     fi
     
     rm -rf "$temp_dir"
-    set -e  # Re-enable strict mode
+    set -e
     return 0
 }
 
 export_selected_workflows() {
-    set +e  # Disable strict mode
+    set +e
     
     local workflows=$(make_api_call "GET" "workflows")
     
     echo ""
-    echo "📋 **Chọn workflows để export:**"
+    ui_info "Danh sách kịch bản để chọn:"
     echo ""
     
     local index=1
     echo "$workflows" | jq -c '.data[]' | while read -r workflow; do
-        local id=$(echo "$workflow" | jq -r '.id')
         local name=$(echo "$workflow" | jq -r '.name')
         local active=$(echo "$workflow" | jq -r '.active')
-        local status=$([ "$active" = "true" ] && echo "🟢" || echo "🔴")
-        
-        echo "$index) $status $name (ID: $id)"
+        local status=$([ "$active" = "true" ] && echo "(Đang chạy)" || echo "(Dừng)")
+        echo "  $index) $name $status"
         index=$((index + 1))
     done
     
     echo ""
-    echo -n -e "${UI_WHITE}Nhập số thứ tự (cách nhau bởi dấu phẩy): ${UI_NC}"
+    echo -n -e "${UI_WHITE}Nhập số thứ tự (ví dụ: 1,3,5): ${UI_NC}"
     read -r selections
     
     local temp_dir="/tmp/n8n_export_selected_$(date +%s)"
@@ -378,40 +349,38 @@ export_selected_workflows() {
             if [[ "$workflow" != "null" ]]; then
                 local id=$(echo "$workflow" | jq -r '.id')
                 local name=$(echo "$workflow" | jq -r '.name' | sed 's/[^a-zA-Z0-9_-]/_/g')
-                
                 local full_workflow=$(make_api_call "GET" "workflows/$id")
                 echo "$full_workflow" > "$temp_dir/${name}_${id}.json"
-                echo "Exported: $name"
                 count=$((count + 1))
             fi
         fi
     done
     
     if [[ $count -gt 0 ]]; then
-        echo "☁️  Uploading $count workflows..."
-
-        # Auto-detect remote name
+        ui_start_spinner "Đang tải $count kịch bản đã chọn lên Google Drive..."
         local remote_name
         if ! remote_name=$(get_gdrive_remote_name); then
-            echo "❌ Không tìm thấy Google Drive remote"
+            ui_stop_spinner
+            ui_error "Không tìm thấy kết nối Google Drive"
             set -e
             return 1
         fi
         
-        echo "✅ Detected remote: $remote_name"
-        rclone mkdir "$remote_name:n8n-workflows" 2>/dev/null || true
+        rclone mkdir "$remote_name:n8n-workflows" >/dev/null 2>&1 || true
         
-        if rclone copy "$temp_dir/" "$remote_name:n8n-workflows/" --include "*.json" --progress; then
-            echo "✅ Upload successful!"
+        if rclone copy "$temp_dir/" "$remote_name:n8n-workflows/" --include "*.json" >/dev/null 2>&1; then
+            ui_stop_spinner
+            ui_success "Đã sao lưu $count kịch bản lên Google Drive thành công."
         else
-            echo "❌ Upload failed"
+            ui_stop_spinner
+            ui_error "Lỗi tải dữ liệu lên Google Drive"
         fi
     else
-        echo "⚠️  No workflows exported"
+        ui_info "Không có kịch bản nào được chọn để xuất."
     fi
     
     rm -rf "$temp_dir"
-    set -e  # Re-enable strict mode
+    set -e
 }
 
 upload_to_gdrive() {
@@ -420,21 +389,18 @@ upload_to_gdrive() {
     
     local remote_name=$(get_gdrive_remote)
     if [[ -z "$remote_name" ]]; then
-        ui_status "error" "Google Drive remote không tìm thấy"
         return 1
     fi
     
-    ui_start_spinner "Upload $count workflows to Google Drive"
-    
-    # Create folder if not exists
+    ui_start_spinner "Đang tải kịch bản lên Google Drive..."
     rclone mkdir "${remote_name}:${GDRIVE_FOLDER}" 2>/dev/null || true
     
-    if rclone copy "$temp_dir/" "${remote_name}:${GDRIVE_FOLDER}/" --include "*.json"; then
+    if rclone copy "$temp_dir/" "${remote_name}:${GDRIVE_FOLDER}/" --include "*.json" >/dev/null 2>&1; then
         ui_stop_spinner
-        ui_status "success" "✅ Đã upload $count workflows lên Google Drive"
+        ui_success "Đã sao lưu kịch bản thành công."
     else
         ui_stop_spinner
-        ui_status "error" "❌ Upload thất bại"
+        ui_error "Lỗi tải dữ liệu lên Drive."
         return 1
     fi
 }
@@ -478,7 +444,7 @@ import_menu() {
     done
     
     echo ""
-    echo -n -e "${UI_WHITE}Chọn file để import (số thứ tự hoặc 'all'): ${UI_NC}"
+    echo -n -e "${UI_WHITE}Nhập số thứ tự (hoặc 'all' để lấy tất cả): ${UI_NC}"
     read -r selection
     
     local temp_dir="/tmp/n8n_import_$(date +%s)"
@@ -486,7 +452,7 @@ import_menu() {
     
     if [[ "$selection" == "all" ]]; then
         # Download all files
-        ui_start_spinner "Download tất cả files"
+        ui_start_spinner "Đang tải về toàn bộ kịch bản..."
         rclone copy "${remote_name}:n8n-workflows/" "$temp_dir/" --include "*.json"
         ui_stop_spinner
         
@@ -497,13 +463,13 @@ import_menu() {
         local selected_file=$(echo "$files" | sed -n "${file_index}p" | awk '{print $2}')
         
         if [[ -n "$selected_file" ]]; then
-            ui_start_spinner "Download $selected_file"
+            ui_start_spinner "Đang tải về kịch bản đã chọn..."
             rclone copy "${remote_name}:n8n-workflows/$selected_file" "$temp_dir/"
             ui_stop_spinner
             
             import_workflow_files "$temp_dir"
         else
-            ui_status "error" "File không hợp lệ"
+            ui_error "Lựa chọn không hợp lệ."
         fi
     fi
     
@@ -511,13 +477,13 @@ import_menu() {
 }
 
 import_workflow_files() {
-    set +e  # Disable strict mode
+    set +e
     
     local import_dir="$1"
     local json_files=($(find "$import_dir" -name "*.json" -type f))
     
     if [[ ${#json_files[@]} -eq 0 ]]; then
-        echo "⚠️  No JSON files found"
+        ui_error "Không tìm thấy tệp kịch bản hợp lệ"
         set -e
         return 1
     fi
@@ -525,115 +491,65 @@ import_workflow_files() {
     local imported=0
     local failed=0
     
+    ui_info "Đang xử lý ${#json_files[@]} tệp kịch bản..."
+    
     for file in "${json_files[@]}"; do
         local filename=$(basename "$file")
-        echo "🔄 Processing: $filename"
         
         # Validate JSON
         if ! jq empty "$file" 2>/dev/null; then
-            echo "❌ Invalid JSON: $filename"
             failed=$((failed + 1))
             continue
         fi
         
-        # Extract only required fields for N8N API
         local workflow_data=""
-        
-        # Method 1: Direct workflow object
         if jq -e '.name' "$file" >/dev/null 2>&1; then
-            # Extract required fields for N8N API
-            workflow_data=$(jq '{
-                name: .name,
-                nodes: .nodes,
-                connections: .connections,
-                settings: (.settings // {})
-            }' "$file" 2>/dev/null)
-            echo "✅ Using direct workflow format (core fields only)"
-            
-        # Method 2: Nested data format
+            workflow_data=$(jq '{name: .name, nodes: .nodes, connections: .connections, settings: (.settings // {})}' "$file" 2>/dev/null)
         elif jq -e '.data.name' "$file" >/dev/null 2>&1; then
-            workflow_data=$(jq '.data | {
-                name: .name,
-                nodes: .nodes,
-                connections: .connections,
-                settings: (.settings // {})
-            }' "$file" 2>/dev/null)
-            echo "✅ Using nested data format"
-            
-        else
-            echo "❌ Unknown workflow format: $filename"
-            failed=$((failed + 1))
-            continue
+            workflow_data=$(jq '.data | {name: .name, nodes: .nodes, connections: .connections, settings: (.settings // {})}' "$file" 2>/dev/null)
         fi
         
         if [[ -z "$workflow_data" || "$workflow_data" == "null" ]]; then
-            echo "❌ No valid workflow data: $filename"
             failed=$((failed + 1))
             continue
         fi
         
-        # Validate required fields
         local workflow_name=$(echo "$workflow_data" | jq -r '.name // ""')
-        local has_nodes=$(echo "$workflow_data" | jq -e '.nodes | length > 0' 2>/dev/null)
-        
         if [[ -z "$workflow_name" ]]; then
-            echo "❌ Missing workflow name: $filename"
             failed=$((failed + 1))
             continue
         fi
         
-        if ! $has_nodes; then
-            echo "❌ No nodes found: $filename"
-            failed=$((failed + 1))
-            continue
-        fi
-        
-        # Check if workflow with same name exists
-        echo "🔍 Checking for existing workflow: $workflow_name"
+        # Check if workflow exists
         local existing_workflows=$(make_api_call "GET" "workflows")
         local existing_id=$(echo "$existing_workflows" | jq -r ".data[] | select(.name==\"$workflow_name\") | .id" 2>/dev/null)
         
         if [[ -n "$existing_id" ]]; then
-            echo "⚠️  Workflow '$workflow_name' already exists (ID: $existing_id)"
-            echo -n "   Overwrite? [y/N]: "
-            read -r overwrite
-            
-            if [[ "$overwrite" =~ ^[Yy]$ ]]; then
-                # Update existing workflow
-                echo "📤 Updating existing workflow..."
+            if ui_confirm "Kịch bản '$workflow_name' đã tồn tại. Ghi đè?"; then
                 local response=$(make_api_call "PUT" "workflows/$existing_id" "$workflow_data")
-                
                 if echo "$response" | jq -e '.id' >/dev/null 2>&1; then
-                    echo "✅ Updated: $workflow_name (ID: $existing_id)"
                     imported=$((imported + 1))
                 else
-                    echo "❌ Update failed: $(echo "$response" | jq -r '.message // "Unknown error"')"
                     failed=$((failed + 1))
                 fi
-            else
-                echo "⏭️  Skipped: $workflow_name"
-                continue
             fi
         else
-            # Create new workflow
-            echo "📤 Creating new workflow..."
             local response=$(make_api_call "POST" "workflows" "$workflow_data")
-            
             if echo "$response" | jq -e '.id' >/dev/null 2>&1; then
-                local new_id=$(echo "$response" | jq -r '.id')
-                echo "✅ Created: $workflow_name (ID: $new_id)"
                 imported=$((imported + 1))
             else
-                echo "❌ Creation failed: $(echo "$response" | jq -r '.message // "Unknown error"')"
-                echo "🔍 Response: $response"
                 failed=$((failed + 1))
             fi
         fi
     done
     
     echo ""
-    echo "📊 Import completed: $imported success, $failed failed"
-    set -e  # Re-enable strict mode
+    if [[ $failed -eq 0 ]]; then
+        ui_success "Đã nhập thành công $imported kịch bản."
+    else
+        ui_info "Hoàn tất: $imported thành công, $failed thất bại."
+    fi
+    set -e
 }
 
 # Export main function

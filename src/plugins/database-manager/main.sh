@@ -1,14 +1,11 @@
-#!/bin/bash
-
-# DataOnline N8N Manager - Database Manager Plugin  
-# Phiên bản: 1.0.0
-# Mô tả: NocoDB integration cho quản lý database N8N
+[[ -n "${DB_MANAGER_MAIN_LOADED:-}" ]] && return 0
+readonly DB_MANAGER_MAIN_LOADED=true
 
 set -euo pipefail
 
 # Source core modules
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$PLUGIN_DIR")")"
+PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$(dirname "$PLUGIN_DIR")")")"
 
 # Load core modules if not loaded
 [[ -z "${LOGGER_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/logger.sh"
@@ -25,21 +22,20 @@ source "$PLUGIN_DIR/nocodb-testing.sh"
 source "$PLUGIN_DIR/nocodb-integration.sh"
 
 # Constants
-readonly DATABASE_MANAGER_LOADED=true
-readonly NOCODB_PORT=8080
-readonly NOCODB_CONTAINER="n8n-nocodb"
-readonly N8N_COMPOSE_DIR="/opt/n8n"
+[[ -z "${DATABASE_MANAGER_LOADED:-}" ]] && readonly DATABASE_MANAGER_LOADED=true
+[[ -z "${NOCODB_PORT:-}" ]] && readonly NOCODB_PORT=8080
+[[ -z "${NOCODB_CONTAINER:-}" ]] && readonly NOCODB_CONTAINER="n8n-nocodb"
+[[ -z "${N8N_COMPOSE_DIR:-}" ]] && readonly N8N_COMPOSE_DIR="/opt/n8n"
 
 # ===== MAIN MENU FUNCTION =====
 
 database_manager_main() {
-    ui_header "Quản lý Database N8N với NocoDB"
+    ui_header "Quản lý Database N8N"
 
     while true; do
         show_database_manager_menu
         
-        echo -n -e "${UI_WHITE}Chọn [0-8]: ${UI_NC}"
-        read -r choice
+        choice=$(ui_prompt "Chọn chức năng" "0" "^[0-8]$")
 
         case "$choice" in
         1) check_nocodb_status ;;
@@ -56,6 +52,7 @@ database_manager_main() {
 
         echo ""
         read -p "Nhấn Enter để tiếp tục..."
+        ui_header "Quản lý Database N8N"
     done
 }
 
@@ -65,31 +62,29 @@ show_database_manager_menu() {
     local nocodb_status=$(get_nocodb_status)
     local nocodb_url=$(get_nocodb_url)
     
-    echo ""
-    ui_section "Trạng thái NocoDB"
-    echo "Status: $nocodb_status"
+    ui_section "Trạng thái Dịch vụ"
+    echo "Dịch vụ: NocoDB"
+    echo "Trạng thái: $nocodb_status"
     if [[ -n "$nocodb_url" ]]; then
         echo "URL: $nocodb_url"
     fi
     echo ""
     
-    echo "🗄️  QUẢN LÝ DATABASE N8N"
+    echo "CÀI ĐẶT & THIẾT LẬP"
+    echo "  1) Kiểm tra trạng thái"
+    echo "  2) Cài đặt NocoDB"
+    echo "  3) Mở giao diện NocoDB"
+    echo "  4) Cài đặt SSL (Tên miền)"
     echo ""
-    echo "📦 INSTALLATION & SETUP"
-    echo "  1) 📊 Kiểm tra trạng thái"
-    echo "  2) 🚀 Cài đặt NocoDB"
-    echo "  3) 🌐 Mở giao diện NocoDB"
-    echo "  4) 🔒 Cài đặt SSL"
+    echo "GIÁM SÁT & XỬ LÝ LỖI"
+    echo "  5) Theo dõi hiệu năng"
+    echo "  6) Chẩn đoán lỗi"
     echo ""
-    echo "📊 MONITORING & TROUBLESHOOTING"
-    echo "  5) 📊 Performance Monitoring"
-    echo "  6) 🔧 Troubleshooting"
+    echo "BẢO TRÌ & KIỂM TRA"
+    echo "  7) Tác vụ bảo trì"
+    echo "  8) Kiểm tra tích hợp"
     echo ""
-    echo "🔧 MAINTENANCE"
-    echo "  7) 🔧 Maintenance Tasks"
-    echo "  8) 🧪 Integration Tests"
-    echo ""
-    echo "  0) ⬅️  Quay lại"
+    echo "  0) Quay lại"
     echo ""
 }
 
@@ -98,24 +93,23 @@ show_database_manager_menu() {
 get_nocodb_status() {
     if docker ps --format '{{.Names}}' | grep -q "^${NOCODB_CONTAINER}$"; then
         if curl -s "http://localhost:${NOCODB_PORT}/api/v1/health" >/dev/null 2>&1; then
-            echo -e "${UI_GREEN}🟢 Hoạt động${UI_NC}"
+            echo -e "${UI_GREEN}Đang hoạt động${UI_NC}"
         else
-            echo -e "${UI_YELLOW}🟡 Khởi động${UI_NC}"
+            echo -e "${UI_YELLOW}Đang khởi động${UI_NC}"
         fi
     else
-        echo -e "${UI_RED}🔴 Chưa cài đặt${UI_NC}"
+        echo -e "${UI_RED}Chưa cài đặt${UI_NC}"
     fi
 }
 
 get_nocodb_url() {
     local domain=$(config_get "nocodb.domain" "")
     
-    # Chỉ hiển thị nếu đã thực sự cấu hình
     if [[ -n "$domain" ]]; then
         echo "https://$domain"
     else
-        # Không tự động tạo subdomain, return empty
-        echo ""
+        local public_ip=$(get_public_ip || echo "localhost")
+        echo "http://$public_ip:8080"
     fi
 }
 
@@ -124,48 +118,34 @@ check_nocodb_status() {
     
     # Check container
     if docker ps --format '{{.Names}}' | grep -q "^${NOCODB_CONTAINER}$"; then
-        ui_status "success" "Container NocoDB đang chạy"
-        
-        # Get container info
-        local container_id=$(docker ps -q --filter "name=^${NOCODB_CONTAINER}$")
-        if [[ -n "$container_id" ]]; then
-            echo "Container ID: $container_id"
-            echo "Image: $(docker inspect $container_id --format '{{.Config.Image}}')"
-            echo "Started: $(docker inspect $container_id --format '{{.State.StartedAt}}' | cut -d'T' -f1)"
-            echo "Status: $(docker inspect $container_id --format '{{.State.Status}}')"
-        fi
+        ui_status "success" "Hệ thống NocoDB đang hoạt động"
     else
-        ui_error "Container NocoDB không chạy" "CONTAINER_STOPPED" "Chạy: docker compose up -d nocodb"
+        ui_status "error" "NocoDB hiện đang dừng"
     fi
     
     # Check API health
-    echo ""
-    ui_start_spinner "Kiểm tra API health"
-    if curl -s "http://localhost:${NOCODB_PORT}/api/v1/health" >/dev/null 2>&1; then
+    ui_start_spinner "Đang kiểm tra trạng thái dịch vụ..."
+    if ! curl -s "http://localhost:${NOCODB_PORT}/api/v1/health" >/dev/null 2>&1; then
         ui_stop_spinner
-        ui_success "NocoDB API phản hồi"
-    else
-        ui_stop_spinner
-        ui_error "NocoDB API không phản hồi" "API_FAILED" "Kiểm tra: docker logs n8n-nocodb"
+        ui_error "Dịch vụ NocoDB không phản hồi"
+        return 1
     fi
     
     # Check database connection
-    echo ""
-    ui_start_spinner "Kiểm tra kết nối database"
-    if test_nocodb_database_connection; then
+    if ! test_nocodb_database_connection; then
         ui_stop_spinner
-        ui_success "Kết nối database OK"
-    else
-        ui_stop_spinner
-        ui_error "Kết nối database thất bại" "DB_CONNECTION_FAILED" "Kiểm tra PostgreSQL container"
+        ui_error "Không thể kết nối với cơ sở dữ liệu"
+        return 1
     fi
+    ui_stop_spinner
+    ui_success "Hệ thống NocoDB đang hoạt động ổn định"
     
-    # Show URLs
+    # Show access info
     echo ""
-    ui_info_box "Thông tin truy cập" \
-        "URL: $(get_nocodb_url)" \
-        "Port: $NOCODB_PORT" \
-        "Admin: $(config_get "nocodb.admin_email" "admin@localhost")"
+    ui_info_box "Thông tin đăng nhập" \
+        "Địa chỉ: $(get_nocodb_url)" \
+        "Tài khoản: $(config_get "nocodb.admin_email" "Chưa cấu hình")" \
+        "Ghi chú: Sử dụng mật khẩu đã được tạo lúc cài đặt"
 }
 
 test_nocodb_database_connection() {
@@ -182,7 +162,7 @@ open_nocodb_interface() {
     local nocodb_url=$(get_nocodb_url)
     local nocodb_status=$(get_nocodb_status)
     
-    if [[ "$nocodb_status" == *"🔴"* ]]; then
+    if [[ "$nocodb_status" == *"Chưa cài đặt"* ]]; then
         ui_error "NocoDB chưa được cài đặt hoặc không hoạt động" "NOCODB_NOT_RUNNING" "Cài đặt NocoDB trước"
         echo -n -e "${UI_YELLOW}Bạn có muốn cài đặt NocoDB ngay? [Y/n]: ${UI_NC}"
         read -r install_now
@@ -193,11 +173,11 @@ open_nocodb_interface() {
     fi
     
     ui_info_box "Thông tin đăng nhập NocoDB" \
-        "🌐 URL: $nocodb_url" \
-        "👤 Email: $(config_get "nocodb.admin_email" "admin@localhost")" \
-        "🔑 Password: $(get_nocodb_admin_password)" \
+        "URL: $nocodb_url" \
+        "User: $(config_get "nocodb.admin_email" "admin@localhost")" \
+        "Pass: $(get_nocodb_admin_password)" \
         "" \
-        "💡 Tip: Bookmark URL này để truy cập nhanh"
+        "Gợi ý: Bookmark URL này để truy cập nhanh"
     
     # Show N8N database connection info
     local n8n_postgres_password=$(grep "POSTGRES_PASSWORD=" "$N8N_COMPOSE_DIR/.env" | cut -d'=' -f2 2>/dev/null || echo "N/A")
@@ -208,7 +188,7 @@ open_nocodb_interface() {
         "User: n8n" \
         "Password: $n8n_postgres_password" \
         "" \
-        "💡 Sử dụng thông tin này để kết nối N8N data trong NocoDB"
+        "Sử dụng thông tin này để kết nối N8N data trong NocoDB"
     
     # Try to open in browser if possible
     if command_exists xdg-open; then
@@ -260,14 +240,9 @@ install_nocodb() {
     
     # Run installation
     if setup_nocodb_integration; then
-        ui_success "🎉 NocoDB đã được cài đặt thành công!"
-        
-        ui_info_box "Bước tiếp theo" \
-            "1. Truy cập giao diện (option 3)" \
-            "2. Tạo connection tới N8N database" \
-            "3. Tạo views và dashboards theo nhu cầu"
+        ui_success "Cài đặt NocoDB thành công!"
     else
-        ui_error "Cài đặt NocoDB thất bại" "INSTALL_FAILED" "Kiểm tra logs: docker compose logs nocodb"
+        ui_error "Quá trình cài đặt gặp lỗi"
         return 1
     fi
 }
@@ -334,7 +309,7 @@ setup_nocodb_ssl() {
     if [[ -n "$nocodb_configured_domain" ]]; then
         ui_info "Domain đã được cấu hình cho NocoDB: $nocodb_configured_domain"
         echo ""
-        echo -e "${UI_CYAN}📋 **Domain Options:**${UI_NC}"
+        echo -e "${UI_CYAN}Domain Options:${UI_NC}"
         echo ""
         echo "1) Sử dụng domain đã cấu hình: $nocodb_configured_domain"
         echo "2) Nhập domain khác"
@@ -346,7 +321,7 @@ setup_nocodb_ssl() {
             ;;
         2)
             echo ""
-            echo -e "${UI_CYAN}🌐 Nhập domain cho NocoDB:${UI_NC}"
+            echo -e "${UI_CYAN}Nhập domain cho NocoDB:${UI_NC}"
             echo -e "${UI_GRAY}   • Có thể nhập domain chính (ví dụ: example.com)${UI_NC}"
             echo -e "${UI_GRAY}   • Hoặc subdomain (ví dụ: nocodb.example.com)${UI_NC}"
             echo ""
@@ -363,68 +338,19 @@ setup_nocodb_ssl() {
             ;;
         esac
     else
-        # Extract main domain từ N8N domain (nếu là subdomain)
-        local main_domain=""
-        if [[ -n "$n8n_domain" ]]; then
-            # Nếu N8N domain là subdomain (có nhiều hơn 2 phần), extract main domain
-            local domain_parts=$(echo "$n8n_domain" | tr '.' '\n' | wc -l)
-            if [[ $domain_parts -gt 2 ]]; then
-                # Lấy phần từ vị trí thứ 2 trở đi (bỏ phần đầu)
-                main_domain=$(echo "$n8n_domain" | sed 's/^[^.]*\.//')
-            else
-                main_domain="$n8n_domain"
-            fi
-        fi
-        
-        echo "📋 **Domain Options:**"
+        # Chỉ có 1 lựa chọn, hỏi domain trực tiếp
         echo ""
-        if [[ -n "$main_domain" ]]; then
-            echo "1) Sử dụng subdomain: db.$main_domain"
-            echo "2) Nhập domain khác"
-        else
-            echo "1) Nhập domain mới"
-        fi
+        echo "Nhap domain cho NocoDB:"
+        echo "  Vi du: nocodb.example.com"
         echo ""
         
         while true; do
-            if [[ -n "$main_domain" ]]; then
-                read -p "Chọn [1-2]: " domain_choice
-                case "$domain_choice" in
-                1) 
-                    nocodb_domain="db.$main_domain"
-                    break
-                    ;;
-                2)
-                    echo ""
-                    echo -e "${UI_CYAN}🌐 Nhập domain cho NocoDB:${UI_NC}"
-                    echo -e "${UI_GRAY}   • Có thể nhập domain chính (ví dụ: example.com)${UI_NC}"
-                    echo -e "${UI_GRAY}   • Hoặc subdomain (ví dụ: nocodb.example.com)${UI_NC}"
-                    echo ""
-                    echo -n -e "${UI_WHITE}Domain: ${UI_NC}"
-                    read -r nocodb_domain
-                    if [[ -n "$nocodb_domain" ]]; then
-                        break
-                    else
-                        ui_status "error" "Domain không được để trống"
-                    fi
-                    ;;
-                *)
-                    ui_status "error" "Lựa chọn không hợp lệ"
-                    ;;
-                esac
+            echo -n "Domain: "
+            read -r nocodb_domain
+            if [[ -n "$nocodb_domain" ]]; then
+                break
             else
-                echo ""
-                echo -e "${UI_CYAN}🌐 Nhập domain cho NocoDB:${UI_NC}"
-                echo -e "${UI_GRAY}   • Có thể nhập domain chính (ví dụ: example.com)${UI_NC}"
-                echo -e "${UI_GRAY}   • Hoặc subdomain (ví dụ: nocodb.example.com)${UI_NC}"
-                echo ""
-                echo -n -e "${UI_WHITE}Domain: ${UI_NC}"
-                read -r nocodb_domain
-                if [[ -n "$nocodb_domain" ]]; then
-                    break
-                else
-                    ui_status "error" "Domain không được để trống"
-                fi
+                echo "Domain khong duoc de trong"
             fi
         done
     fi
@@ -616,7 +542,7 @@ update_nocodb_ssl_config() {
 uninstall_nocodb() {
     ui_section "Gỡ cài đặt NocoDB"
     
-    ui_warning_box "⚠️  CẢNH BÁO" \
+    ui_warning_box "[WARN] CẢNH BÁO" \
         "Sẽ xóa hoàn toàn NocoDB và cấu hình" \
         "Dữ liệu N8N sẽ không bị ảnh hưởng" \
         "Views và dashboard sẽ bị mất"

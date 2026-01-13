@@ -107,12 +107,12 @@ spinner_with_feedback() {
     
     if eval "$command" >> "$log_file" 2>&1; then
         stop_spinner
-        echo -e "${SPINNER_GREEN}✅ $message - $success_msg${SPINNER_NC}"
+        echo -e "${SPINNER_GREEN}[OK] $message - $success_msg${SPINNER_NC}"
         rm -f "$log_file"
         return 0
     else
         stop_spinner
-        echo -e "${SPINNER_RED}❌ $message - $error_msg${SPINNER_NC}"
+        echo -e "${SPINNER_RED}[FAIL] $message - $error_msg${SPINNER_NC}"
         
         # Show error details
         if [[ -f "$log_file" ]]; then
@@ -155,7 +155,7 @@ network_spinner() {
     local message="$1"
     local command="$2"
     
-    spinner_with_feedback "🌐 $message" "$command" "Kết nối thành công" "Kết nối thất bại" "arrows"
+    spinner_with_feedback " $message" "$command" "Kết nối thành công" "Kết nối thất bại" "arrows"
 }
 
 # Download spinner
@@ -163,7 +163,7 @@ download_spinner() {
     local message="$1"
     local command="$2"
     
-    spinner_with_feedback "📥 $message" "$command" "Tải xuống hoàn tất" "Tải xuống thất bại" "bars"
+    spinner_with_feedback " $message" "$command" "Tải xuống hoàn tất" "Tải xuống thất bại" "bars"
 }
 
 # Installation spinner
@@ -179,7 +179,7 @@ config_spinner() {
     local message="$1"
     local command="$2"
     
-    spinner_with_feedback "⚙️ $message" "$command" "Cấu hình hoàn tất" "Cấu hình thất bại" "simple"
+    spinner_with_feedback " $message" "$command" "Cấu hình hoàn tất" "Cấu hình thất bại" "simple"
 }
 
 # Service management spinner
@@ -187,7 +187,7 @@ service_spinner() {
     local message="$1"
     local command="$2"
     
-    spinner_with_feedback "🔧 $message" "$command" "Service sẵn sàng" "Service lỗi" "clock"
+    spinner_with_feedback " $message" "$command" "Service sẵn sàng" "Service lỗi" "clock"
 }
 
 # ===== UTILITY FUNCTIONS =====
@@ -201,7 +201,7 @@ set_spinner_type() {
             SPINNER_TYPE="$type"
             ;;
         *)
-            echo -e "${SPINNER_YELLOW}⚠️ Spinner type không hợp lệ: $type. Sử dụng 'dots'${SPINNER_NC}"
+            echo -e "${SPINNER_YELLOW}[WARN] Spinner type không hợp lệ: $type. Sử dụng 'dots'${SPINNER_NC}"
             SPINNER_TYPE="dots"
             ;;
     esac
@@ -214,7 +214,7 @@ set_spinner_delay() {
     if [[ "$delay" =~ ^[0-9]*\.?[0-9]+$ ]]; then
         SPINNER_DELAY="$delay"
     else
-        echo -e "${SPINNER_YELLOW}⚠️ Delay không hợp lệ: $delay. Sử dụng 0.1${SPINNER_NC}"
+        echo -e "${SPINNER_YELLOW}[WARN] Delay không hợp lệ: $delay. Sử dụng 0.1${SPINNER_NC}"
         SPINNER_DELAY=0.1
     fi
 }
@@ -236,7 +236,7 @@ demo_spinners() {
         start_spinner "Demo $type spinner" "$type"
         sleep 2
         stop_spinner
-        echo -e "${SPINNER_GREEN}✅ $type spinner hoạt động${SPINNER_NC}"
+        echo -e "${SPINNER_GREEN}[OK] $type spinner hoạt động${SPINNER_NC}"
         echo ""
     done
     
@@ -245,7 +245,7 @@ demo_spinners() {
     install_spinner "Cài đặt demo package" "sleep 1"
     config_spinner "Cấu hình demo" "sleep 1"
     
-    echo -e "${SPINNER_GREEN}✅ Demo hoàn tất!${SPINNER_NC}"
+    echo -e "${SPINNER_GREEN}[OK] Demo hoàn tất!${SPINNER_NC}"
 }
 
 # Cleanup function

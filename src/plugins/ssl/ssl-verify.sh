@@ -9,18 +9,10 @@ verify_ssl_setup() {
     local domain="$1"
     local n8n_port="${2:-5678}"
 
-    ui_section "Xác minh cài đặt SSL"
-
-    # Check N8N running
-    if command_exists docker && docker ps | grep -q "n8n"; then
-        ui_success "N8N đang chạy trong Docker"
-    elif systemctl is-active --quiet n8n; then
-        ui_success "N8N service đang chạy"
-    else
-        ui_warning "N8N có thể không chạy"
-        if [[ -f "/opt/n8n/docker-compose.yml" ]]; then
-            ui_run_command "Khởi động N8N" "cd /opt/n8n && docker compose up -d"
-        fi
+    # Check N8N status quietly
+    if ! docker ps | grep -q "n8n" && ! systemctl is-active --quiet n8n; then
+        ui_warning "Ứng dụng n8n đang dừng, đang thử khởi động lại..."
+        [[ -f "/opt/n8n/docker-compose.yml" ]] && cd /opt/n8n && docker compose up -d >/dev/null 2>&1
     fi
 
     # Check SSL certificate files
@@ -72,16 +64,14 @@ verify_ssl_setup() {
                 
                 # Source module (các module UI đã được source từ main.sh)
                 source "$ssl_nginx_module"
-                
-                # Tạo lại nginx config (suppress output để không làm rối UI)
-                # Sử dụng create_nginx_ssl_config nhưng redirect output
+
                 if create_nginx_ssl_config "$domain" "$n8n_port" >/dev/null 2>&1; then
-                    ui_success "Đã tạo lại cấu hình nginx"
+                    ui_success "Đã khôi phục cấu hình hệ thống"
                 else
                     # Fallback: Tạo config thủ công nếu module không hoạt động
-                    ui_info "Thử tạo config thủ công..."
+                    ui_info "Đang thử phương án dự phòng..."
                     if auto_create_nginx_config "$domain" "$n8n_port"; then
-                        ui_success "Đã tạo lại cấu hình nginx"
+                        ui_success "Đã khôi phục cấu hình hệ thống"
                     else
                         ui_warning "Không thể tự động tạo lại cấu hình nginx"
                         ui_info "Vui lòng chạy lại 'Cấu hình SSL với Let's Encrypt' để tạo lại"
@@ -115,13 +105,10 @@ verify_ssl_setup() {
         fi
     fi
 
-    # Check if N8N is ready before verifying HTTPS
-    ui_info "Đang kiểm tra N8N đã sẵn sàng..."
+    # Wait for N8N to be ready silently
     local n8n_ready=false
     local retry_count=0
-    local max_retries=10
-    
-    while [[ $retry_count -lt $max_retries ]]; do
+    while [[ $retry_count -lt 15 ]]; do
         if curl -s -f "http://127.0.0.1:$n8n_port" >/dev/null 2>&1; then
             n8n_ready=true
             break
@@ -129,12 +116,6 @@ verify_ssl_setup() {
         retry_count=$((retry_count + 1))
         sleep 2
     done
-    
-    if [[ "$n8n_ready" == "true" ]]; then
-        ui_success "N8N đã sẵn sàng"
-    else
-        ui_warning "N8N chưa sẵn sàng sau $max_retries lần thử, tiếp tục verify..."
-    fi
 
     # Check HTTPS connection with retry logic
     ui_start_spinner "Kiểm tra kết nối HTTPS"
@@ -177,33 +158,24 @@ verify_ssl_setup() {
     ui_stop_spinner
     
     if [[ $curl_exit -ne 0 ]] || [[ -z "$https_status" ]] || [[ "$https_status" == "000" ]]; then
-        ui_warning "Không thể kết nối đến https://$domain"
-        ui_info "Có thể domain chưa được trỏ DNS về server này"
-        ui_info "Hoặc firewall đang chặn kết nối"
-        ui_info "💡 Kiểm tra:"
-        ui_info "   • DNS: dig $domain"
-        ui_info "   • Firewall: sudo ufw status"
-        ui_info "   • Nginx: sudo systemctl status nginx"
-        ui_info "   • N8N: curl http://127.0.0.1:$n8n_port"
+        ui_warning "Không thể truy cập địa chỉ https://$domain"
+        ui_info "Nguyên nhân có thể do tên miền chưa được trỏ về máy chủ."
+        ui_info "Vui lòng kiểm tra lại cấu hình DNS và Firewall."
         return 1
     elif [[ "$https_status" =~ ^(200|201|202|204|301|302|307|308)$ ]]; then
-        ui_success "HTTPS hoạt động: https://$domain (HTTP $https_status)"
+        ui_success "Cổng kết nối HTTPS hoạt động tốt (Mã: $https_status)"
         return 0
     elif [[ "$https_status" == "502" ]]; then
-        ui_warning "HTTPS trả về lỗi 502 (Bad Gateway)"
-        ui_info "N8N có thể đang khởi động lại hoặc chưa sẵn sàng"
-        ui_info "💡 Kiểm tra:"
-        ui_info "   • N8N đang chạy: docker ps | grep n8n"
-        ui_info "   • N8N logs: docker logs n8n --tail 50"
-        ui_info "   • N8N port: curl http://127.0.0.1:$n8n_port"
-        ui_info "   • Đợi vài giây rồi thử lại: curl -k -I https://$domain"
+        ui_warning "Hệ thống đang khởi động (Mã lỗi 502)"
+        ui_info "Ứng dụng n8n cần thời gian để khởi chạy hoàn toàn."
+        ui_info "Vui lòng đợi 1-2 phút và thử lại trên trình duyệt."
         ui_info ""
-        ui_info "⚠️  Nếu đã có thể truy cập trên trình duyệt, có thể bỏ qua cảnh báo này"
+        ui_info "Nếu bạn đã truy cập được bình thường, hãy bỏ qua thông báo này."
         return 0  # Return success even with 502 if user says it works
     else
         ui_warning "HTTPS trả về mã lỗi: $https_status"
         ui_info "Kiểm tra cấu hình nginx và SSL certificate"
-        ui_info "💡 Thử truy cập: curl -k -I https://$domain"
+        ui_info " Thử truy cập: curl -k -I https://$domain"
         return 1
     fi
 }
@@ -224,88 +196,34 @@ update_n8n_ssl_config() {
         return 0
     fi
 
-    ui_info "Đang cập nhật cấu hình N8N cho HTTPS..."
+    ui_start_spinner "Đang cập nhật cấu hình N8N cho HTTPS"
     
-    # Backup files trước khi sửa
+    # Backup files
     local backup_timestamp=$(date +%Y%m%d_%H%M%S)
-    [[ -f "$compose_dir/.env" ]] && cp "$compose_dir/.env" "$compose_dir/.env.backup.$backup_timestamp" 2>/dev/null || true
-    [[ -f "$compose_dir/docker-compose.yml" ]] && cp "$compose_dir/docker-compose.yml" "$compose_dir/docker-compose.yml.backup.$backup_timestamp" 2>/dev/null || true
+    [[ -f "$compose_dir/.env" ]] && cp "$compose_dir/.env" "$compose_dir/.env.backup.$backup_timestamp" 2>/dev/null
+    [[ -f "$compose_dir/docker-compose.yml" ]] && cp "$compose_dir/docker-compose.yml" "$compose_dir/docker-compose.yml.backup.$backup_timestamp" 2>/dev/null
     
     cd "$compose_dir" || return 1
     
-    # Update .env file (nếu có)
+    # Update .env
     if [[ -f ".env" ]]; then
-        # Update hoặc thêm N8N_DOMAIN
-        if grep -q "^N8N_DOMAIN=" .env; then
-            sed -i "s|^N8N_DOMAIN=.*|N8N_DOMAIN=$domain|" .env
-        else
-            echo "N8N_DOMAIN=$domain" >> .env
-        fi
-        
-        # Update hoặc thêm N8N_WEBHOOK_URL
-        if grep -q "^N8N_WEBHOOK_URL=" .env; then
-            sed -i "s|^N8N_WEBHOOK_URL=.*|N8N_WEBHOOK_URL=https://$domain|" .env
-        else
-            echo "N8N_WEBHOOK_URL=https://$domain" >> .env
-        fi
+        grep -q "^N8N_DOMAIN=" .env && sed -i "s|^N8N_DOMAIN=.*|N8N_DOMAIN=$domain|" .env || echo "N8N_DOMAIN=$domain" >> .env
+        grep -q "^N8N_WEBHOOK_URL=" .env && sed -i "s|^N8N_WEBHOOK_URL=.*|N8N_WEBHOOK_URL=https://$domain|" .env || echo "N8N_WEBHOOK_URL=https://$domain" >> .env
     fi
     
-    # Update docker-compose.yml environment variables
-    # Update N8N_PROTOCOL
-    if grep -q "N8N_PROTOCOL" docker-compose.yml; then
-        sed -i "s|N8N_PROTOCOL=.*|N8N_PROTOCOL=https|g" docker-compose.yml
-        sed -i "s|N8N_PROTOCOL:.*|N8N_PROTOCOL: https|g" docker-compose.yml
-    else
-        # Thêm vào environment section của n8n service
-        if grep -q "n8n:" docker-compose.yml; then
-            # Tìm dòng environment và thêm vào
-            sed -i "/n8n:/,/^[[:space:]]*[a-z]/ { /environment:/a\        - N8N_PROTOCOL=https" docker-compose.yml 2>/dev/null || true
-        fi
-    fi
+    # Update docker-compose.yml
+    sed -i "s|N8N_PROTOCOL=.*|N8N_PROTOCOL=https|g; s|N8N_PROTOCOL:.*|N8N_PROTOCOL: https|g" docker-compose.yml 2>/dev/null
+    sed -i "s|WEBHOOK_URL=.*|WEBHOOK_URL=https://$domain/|g; s|WEBHOOK_URL:.*|WEBHOOK_URL: https://$domain/|g" docker-compose.yml 2>/dev/null
     
-    # Update WEBHOOK_URL
-    if grep -q "WEBHOOK_URL" docker-compose.yml; then
-        sed -i "s|WEBHOOK_URL=.*|WEBHOOK_URL=https://$domain/|g" docker-compose.yml
-        sed -i "s|WEBHOOK_URL:.*|WEBHOOK_URL: https://$domain/|g" docker-compose.yml
-    fi
-    
-    # Update N8N_HOST (nếu có)
-    if grep -q "N8N_HOST" docker-compose.yml; then
-        sed -i "s|N8N_HOST=.*|N8N_HOST=$domain|g" docker-compose.yml
-        sed -i "s|N8N_HOST:.*|N8N_HOST: $domain|g" docker-compose.yml
-    fi
-    
-    # Restart N8N container
-    ui_info "Đang khởi động lại N8N để áp dụng cấu hình mới..."
-    if command_exists docker && docker ps --format '{{.Names}}' | grep -q "^n8n$"; then
-        if docker compose restart n8n >/dev/null 2>&1; then
-            ui_success "N8N đã được khởi động lại"
-            
-            # Chờ N8N khởi động xong và sẵn sàng
-            ui_info "Đang chờ N8N khởi động và sẵn sàng..."
-            local n8n_ready=false
-            local wait_count=0
-            local max_wait=30  # Tối đa 30 giây
-            
-            while [[ $wait_count -lt $max_wait ]]; do
-                if curl -s -f "http://127.0.0.1:$n8n_port" >/dev/null 2>&1; then
-                    n8n_ready=true
-                    break
-                fi
-                wait_count=$((wait_count + 2))
-                sleep 2
-            done
-            
-            if [[ "$n8n_ready" == "true" ]]; then
-                ui_success "N8N đã sẵn sàng"
-            else
-                ui_warning "N8N chưa sẵn sàng sau $max_wait giây, có thể cần thêm thời gian"
-            fi
-        else
-            ui_warning "Không thể khởi động lại N8N (có thể cần restart thủ công)"
-        fi
-    else
-        ui_warning "N8N container không chạy, cấu hình đã được lưu"
+    # Restart N8N
+    if docker compose restart n8n >/dev/null 2>&1; then
+        # Silent wait
+        local wait_count=0
+        while [[ $wait_count -lt 20 ]]; do
+            curl -s -f "http://127.0.0.1:$n8n_port" >/dev/null 2>&1 && break
+            wait_count=$((wait_count + 1))
+            sleep 1
+        done
     fi
 
     # Save to config
@@ -313,7 +231,7 @@ update_n8n_ssl_config() {
     config_set "n8n.ssl_enabled" "true"
     config_set "n8n.webhook_url" "https://$domain"
     
-    ui_success "Cấu hình N8N đã được cập nhật cho HTTPS"
+    ui_stop_spinner
     return 0
 }
 

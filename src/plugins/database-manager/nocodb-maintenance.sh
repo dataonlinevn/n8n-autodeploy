@@ -11,15 +11,15 @@ set -euo pipefail
 run_maintenance_tasks() {
     ui_section "NocoDB Maintenance Tasks"
     
-    echo "🔧 **Available Maintenance Tasks:**"
+    echo "Available Maintenance Tasks:"
     echo ""
-    echo "1) 🧹 Cleanup old logs"
-    echo "2) 🗄️  Optimize database"
-    echo "3) 🔄 Update Docker image"
-    echo "4) 📊 Generate health report"
-    echo "5) 🔒 Security audit"
-    echo "6) 💾 Full backup"
-    echo "0) ⬅️  Quay lại"
+    echo "1) Cleanup old logs"
+    echo "2) Optimize database"
+    echo "3) Update Docker image"
+    echo "4) Generate health report"
+    echo "5) Security audit"
+    echo "6) Full backup"
+    echo "0) Quay lại"
     echo ""
     
     read -p "Chọn [0-6]: " maintenance_choice
@@ -152,21 +152,21 @@ generate_health_report() {
     ui_start_spinner "Generating health report"
     
     {
-        echo "════════════════════════════════════════"
-        echo "NocoDB Health Report"
-        echo "Generated: $(date)"
-        echo "════════════════════════════════════════"
+        echo "========================================"
+        echo "Báo cáo sức khỏe hệ thống NocoDB"
+        echo "Thời gian tạo: $(date)"
+        echo "========================================"
         echo ""
         
-        echo "📊 SYSTEM INFORMATION:"
+        echo "THÔNG TIN HỆ THỐNG:"
         echo "- OS: $(lsb_release -d | cut -f2 2>/dev/null || echo "Unknown")"
         echo "- Kernel: $(uname -r)"
         echo "- Docker: $(docker --version 2>/dev/null | cut -d' ' -f3 | cut -d',' -f1 || echo "Unknown")"
         echo ""
         
-        echo "🐳 CONTAINER STATUS:"
+        echo "TRẠNG THÁI DỊCH VỤ:"
         if docker ps --format '{{.Names}}' | grep -q "^${NOCODB_CONTAINER}$"; then
-            echo "- Status: Running"
+            echo "- N8N: Đang hoạt động"
             echo "- Image: $(docker inspect ${NOCODB_CONTAINER} --format '{{.Config.Image}}' 2>/dev/null || echo "Unknown")"
             echo "- Started: $(docker inspect ${NOCODB_CONTAINER} --format '{{.State.StartedAt}}' 2>/dev/null | cut -d'T' -f1 || echo "Unknown")"
         else
@@ -174,27 +174,27 @@ generate_health_report() {
         fi
         echo ""
         
-        echo "🔌 CONNECTIVITY:"
-        echo "- Port $NOCODB_PORT: $(ss -tlpn 2>/dev/null | grep -q ":${NOCODB_PORT}" && echo "Listening" || echo "Not listening")"
-        echo "- API Health: $(curl -s "http://localhost:${NOCODB_PORT}/api/v1/health" >/dev/null 2>&1 && echo "OK" || echo "FAILED")"
+        echo "KẾT NỐI:"
+        echo "- Port $NOCODB_PORT: $(ss -tlpn 2>/dev/null | grep -q ":${NOCODB_PORT}" && echo "Mở" || echo "Đóng")"
+        echo "- API: $(curl -s "http://localhost:${NOCODB_PORT}/api/v1/health" >/dev/null 2>&1 && echo "Hoạt động" || echo "Lỗi")"
         echo ""
         
-        echo "🗄️  DATABASE:"
+        echo "DATABASE:"
         echo "- Connection: $(docker exec n8n-postgres pg_isready -U n8n >/dev/null 2>&1 && echo "OK" || echo "FAILED")"
         echo "- Database: $(config_get "nocodb.db_name" "n8n")"
         echo ""
         
-        echo "💾 STORAGE:"
-        echo "- Available Space: $(df -h "$N8N_COMPOSE_DIR" | awk 'NR==2 {print $4}')"
-        echo "- NocoDB Data: $(docker system df -v 2>/dev/null | grep -i nocodb | awk '{print $3}' || echo "Unknown")"
+        echo "DUNG LƯỢNG LƯU TRỮ:"
+        echo "- Còn trống: $(df -h "$N8N_COMPOSE_DIR" | awk 'NR==2 {print $4}')"
+        echo "- Dữ liệu NocoDB: $(docker system df -v 2>/dev/null | grep -i nocodb | awk '{print $3}' || echo "N/A")"
         echo ""
         
-        echo "🔒 SECURITY:"
-        echo "- SSL Enabled: $(config_get "nocodb.ssl_enabled" "false")"
-        echo "- Domain: $(config_get "nocodb.domain" "Not configured")"
+        echo "BẢO MẬT:"
+        echo "- SSL: $(config_get "nocodb.ssl_enabled" "false")"
+        echo "- Tên miền: $(config_get "nocodb.domain" "Chưa cấu hình")"
         echo ""
         
-        echo "════════════════════════════════════════"
+        echo "========================================"
     } > "$report_file"
     
     ui_stop_spinner
@@ -206,13 +206,13 @@ generate_health_report() {
 security_audit() {
     ui_section "Security Audit"
     
-    ui_info "🔒 Đang kiểm tra security settings..."
+    ui_info "Đang kiểm tra security settings..."
     echo ""
     
     local issues=0
     
     # Check 1: Password file permissions
-    echo "1️⃣  **Password File Permissions**"
+    echo "1) Password File Permissions"
     local password_file="$N8N_COMPOSE_DIR/.nocodb-admin-password"
     if [[ -f "$password_file" ]]; then
         local perms=$(stat -c %a "$password_file" 2>/dev/null || echo "000")
@@ -228,7 +228,7 @@ security_audit() {
     
     # Check 2: JWT secret
     echo ""
-    echo "2️⃣  **JWT Secret**"
+    echo "2) JWT Secret"
     local jwt_secret=$(grep "NOCODB_JWT_SECRET" "$N8N_COMPOSE_DIR/.env" 2>/dev/null | cut -d'=' -f2 || echo "")
     if [[ -z "$jwt_secret" ]]; then
         ui_warning "JWT secret chưa được cấu hình"
@@ -242,7 +242,7 @@ security_audit() {
     
     # Check 3: SSL configuration
     echo ""
-    echo "3️⃣  **SSL Configuration**"
+    echo "3) SSL Configuration"
     local ssl_enabled=$(config_get "nocodb.ssl_enabled" "false")
     if [[ "$ssl_enabled" != "true" ]]; then
         ui_warning "SSL chưa được kích hoạt"
@@ -253,7 +253,7 @@ security_audit() {
     
     # Check 4: Environment file permissions
     echo ""
-    echo "4️⃣  **Environment File Permissions**"
+    echo "4) Environment File Permissions"
     local env_perms=$(stat -c %a "$N8N_COMPOSE_DIR/.env" 2>/dev/null || echo "000")
     if [[ "$env_perms" != "600" ]]; then
         ui_warning "Environment file permissions không an toàn: $env_perms (should be 600)"
@@ -264,7 +264,7 @@ security_audit() {
     
     # Check 5: Public URL exposure
     echo ""
-    echo "5️⃣  **Public URL Configuration**"
+    echo "5) Public URL Configuration"
     local nocodb_url=$(get_nocodb_url)
     if [[ "$nocodb_url" == http://* ]]; then
         ui_warning "NocoDB đang dùng HTTP (không an toàn)"
@@ -278,9 +278,9 @@ security_audit() {
     # Summary
     echo ""
     if [[ $issues -eq 0 ]]; then
-        ui_success "🎉 Không phát hiện vấn đề security!"
+        ui_success "Không phát hiện vấn đề security!"
     else
-        ui_error "⚠️  Phát hiện $issues vấn đề security cần xử lý" "SECURITY_ISSUES" "Xem chi tiết ở trên"
+        ui_error "[WARN] Phát hiện $issues vấn đề security cần xử lý" "SECURITY_ISSUES" "Xem chi tiết ở trên"
     fi
 }
 

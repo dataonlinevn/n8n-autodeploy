@@ -1,14 +1,11 @@
-#!/bin/bash
-
-# DataOnline N8N Manager - SSL Automation Plugin
-# Phiên bản: 1.0.0
-# Tự động hóa cài đặt SSL cho N8N với Let's Encrypt
+[[ -n "${SSL_MAIN_LOADED:-}" ]] && return 0
+readonly SSL_MAIN_LOADED=true
 
 set -euo pipefail
 
 # Source core modules
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$PLUGIN_DIR")")"
+PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$(dirname "$PLUGIN_DIR")")")"
 
 [[ -z "${LOGGER_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/logger.sh"
 [[ -z "${CONFIG_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/config.sh"
@@ -17,9 +14,9 @@ PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$PLUGIN_DIR")")"
 [[ -z "${SPINNER_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/spinner.sh"
 
 # Constants
-readonly SSL_LOADED=true
-readonly WEBROOT_PATH="/var/www/html"
-readonly CERTBOT_LOG="/var/log/letsencrypt"
+[[ -z "${SSL_LOADED:-}" ]] && readonly SSL_LOADED=true
+[[ -z "${WEBROOT_PATH:-}" ]] && readonly WEBROOT_PATH="/var/www/html"
+[[ -z "${CERTBOT_LOG:-}" ]] && readonly CERTBOT_LOG="/var/log/letsencrypt"
 
 # Load sub-modules (override local definitions)
 source "$PLUGIN_DIR/ssl-domain.sh"
@@ -30,51 +27,34 @@ source "$PLUGIN_DIR/ssl-verify.sh"
 # ===== MAIN SSL SETUP FUNCTION =====
 
 setup_ssl_main() {
-    ui_header "Cài đặt SSL với Let's Encrypt"
+    ui_header "Cài đặt Bảo mật SSL (HTTPS)"
     
-    echo ""
-    echo -e "${UI_CYAN}🚀 Script sẽ tự động cấu hình hoàn chỉnh SSL cho N8N${UI_NC}"
-    echo -e "${UI_GRAY}   • Tự động tạo nginx config${UI_NC}"
-    echo -e "${UI_GRAY}   • Tự động lấy SSL certificate${UI_NC}"
-    echo -e "${UI_GRAY}   • Tự động cấu hình N8N cho HTTPS${UI_NC}"
-    echo -e "${UI_GRAY}   • Tự động verify và test${UI_NC}"
+    echo -e "${UI_CYAN}Hệ thống sẽ tự động cấu hình chứng chỉ bảo mật cho tên miền của bạn.${UI_NC}"
+    echo -e "${UI_GRAY}   • Tự động thiết lập máy chủ Nginx${UI_NC}"
+    echo -e "${UI_GRAY}   • Đăng ký chứng chỉ Let's Encrypt (Miễn phí)${UI_NC}"
+    echo -e "${UI_GRAY}   • Tự động chuyển hướng HTTPS và bảo mật ứng dụng${UI_NC}"
     echo ""
 
-    # Get domain
-    echo -e "${UI_CYAN}📝 Nhập domain cho N8N:${UI_NC}"
-    echo -e "${UI_GRAY}   • Domain chính (ví dụ: example.com)${UI_NC}"
-    echo -e "${UI_GRAY}   • Hoặc subdomain (ví dụ: n8n.example.com)${UI_NC}"
-    echo -e "${UI_GRAY}   • Đảm bảo domain đã được trỏ DNS về server này${UI_NC}"
-    echo ""
-    echo -n -e "${UI_WHITE}Domain: ${UI_NC}"
-    read -r domain
+    domain=$(ui_prompt "Nhập tên miền (ví dụ: n8n.congty.com)" "")
 
     if [[ -z "$domain" ]]; then
-        ui_error "Domain không được để trống" "EMPTY_DOMAIN"
+        ui_error "Lỗi: Tên miền không được để trống"
         return 1
     fi
 
     if ! ui_validate_domain "$domain"; then
-        ui_error "Domain không hợp lệ: $domain" "INVALID_DOMAIN"
+        ui_error "Tên miền không hợp lệ: $domain"
         echo ""
-        echo -e "${UI_YELLOW}💡 Ví dụ domain hợp lệ:${UI_NC}"
-        echo -e "   • example.com"
-        echo -e "   • n8n.example.com"
-        echo -e "   • app.example.com"
+        echo -e "${UI_YELLOW} Ví dụ tên miền đúng:${UI_NC}"
+        echo -e "   - n8n.yourdomain.com"
+        echo -e "   - automation.site.com"
         return 1
     fi
 
-    # Get email
-    echo ""
-    echo -e "${UI_CYAN}📧 Nhập email cho Let's Encrypt:${UI_NC}"
-    echo -e "${UI_GRAY}   • Email để nhận thông báo về SSL certificate${UI_NC}"
-    echo ""
-    echo -n -e "${UI_WHITE}Email: ${UI_NC}"
-    read -r email
+    email=$(ui_prompt "Email nhận thông báo bảo mật" "admin@$domain")
 
     if [[ -z "$email" ]]; then
         email="admin@$domain"
-        ui_info "Sử dụng email mặc định: $email"
     fi
 
     if ! ui_validate_email "$email"; then
@@ -99,19 +79,17 @@ setup_ssl_main() {
 
     # Hiển thị thông tin và xác nhận
     echo ""
-    ui_info_box "Thông tin SSL setup" \
-        "Domain: $domain" \
-        "Email: $email" \
-        "N8N Port: $n8n_port" \
+    ui_info_box "THÔNG TIN CÀI ĐẶT" \
+        "Tên miền: $domain" \
+        "Email:    $email" \
+        "Ứng dụng: n8n (Port $n8n_port)" \
         "" \
-        "Script sẽ tự động:" \
-        "  1. Kiểm tra và cài đặt dependencies" \
-        "  2. Tạo nginx HTTP config" \
-        "  3. Lấy SSL certificate từ Let's Encrypt" \
-        "  4. Tạo nginx HTTPS config" \
-        "  5. Cấu hình N8N cho HTTPS" \
-        "  6. Setup auto-renewal" \
-        "  7. Verify và test"
+        "Quy trình thực hiện:" \
+        "  1. Kiểm tra kết nối DNS" \
+        "  2. Cài đặt các công cụ bảo mật" \
+        "  3. Đăng ký chứng chỉ Let's Encrypt" \
+        "  4. Kích hoạt chuyển hướng HTTPS" \
+        "  5. Thiết lập tự động gia hạn (90 ngày)"
 
     echo ""
     echo -n -e "${UI_YELLOW}Tiếp tục cài đặt SSL? [Y/n]: ${UI_NC}"
@@ -124,95 +102,48 @@ setup_ssl_main() {
     echo ""
     ui_section "Bắt đầu cài đặt SSL tự động"
 
-    # Step 1: Validate DNS (cảnh báo nhưng vẫn tiếp tục)
-    ui_info "🔍 Bước 1/7: Kiểm tra DNS"
-    if validate_domain_dns "$domain"; then
-        ui_success "DNS đã được cấu hình đúng"
-    else
+    # Step 1: Validate DNS 
+    ui_info "Bước 1/4: Kiểm tra DNS"
+    if ! validate_domain_dns "$domain"; then
         ui_warning "DNS chưa được cấu hình hoặc chưa trỏ về server này"
-        ui_info "Tiếp tục cài đặt (có thể thất bại nếu DNS chưa đúng)"
-        echo ""
-        echo -n -e "${UI_YELLOW}Tiếp tục dù DNS chưa đúng? [Y/n]: ${UI_NC}"
-        read -r continue_dns
-        if [[ "$continue_dns" =~ ^[Nn]$ ]]; then
-            ui_info "Đã hủy. Vui lòng cấu hình DNS trước."
+        if ! ui_confirm "Tiếp tục dù DNS chưa đúng?"; then
             return 0
         fi
     fi
 
-    # Step 2: Install dependencies
-    ui_info "📦 Bước 2/7: Cài đặt dependencies"
-    if ! install_certbot; then
-        ui_error "Không thể cài đặt Certbot" "CERTBOT_INSTALL_FAILED"
-        return 1
-    fi
+    # Step 2: Obtain SSL certificate
+    ui_info "Bước 2/4: Cài đặt & Lấy chứng chỉ SSL"
+    install_certbot || return 1
+    create_nginx_http_config "$domain" "$n8n_port" || return 1
+    obtain_ssl_certificate "$domain" "$email" || return 1
 
-    # Step 3: Create HTTP config
-    ui_info "🌐 Bước 3/7: Tạo nginx HTTP config"
-    if ! create_nginx_http_config "$domain" "$n8n_port"; then
-        ui_error "Không thể tạo nginx HTTP config" "NGINX_HTTP_FAILED"
-        return 1
-    fi
+    # Step 3: Configure HTTPS
+    ui_info "Bước 3/4: Cấu hình Nginx & HTTPS"
+    create_nginx_ssl_config "$domain" "$n8n_port" || return 1
+    setup_auto_renewal || return 1
 
-    # Step 4: Obtain SSL certificate
-    ui_info "🔒 Bước 4/7: Lấy SSL certificate từ Let's Encrypt"
-    if ! obtain_ssl_certificate "$domain" "$email"; then
-        ui_error "Không thể lấy SSL certificate" "CERT_SETUP_FAILED"
-        ui_info "💡 Kiểm tra:"
-        ui_info "   • DNS đã trỏ về server này chưa?"
-        ui_info "   • Port 80 đã mở chưa?"
-        ui_info "   • Domain đã được sử dụng cho certificate khác chưa?"
-        return 1
-    fi
-
-    # Step 5: Create HTTPS config
-    ui_info "🔐 Bước 5/7: Tạo nginx HTTPS config"
-    if [[ -f "/etc/letsencrypt/live/$domain/fullchain.pem" ]]; then
-        if ! create_nginx_ssl_config "$domain" "$n8n_port"; then
-            ui_error "Không thể tạo nginx HTTPS config" "NGINX_HTTPS_FAILED"
-            return 1
-        fi
-        
-        # Setup auto-renewal
-        ui_info "🔄 Cấu hình tự động gia hạn SSL"
-        if ! setup_auto_renewal; then
-            ui_warning "Không thể cấu hình auto-renewal (có thể cấu hình thủ công sau)"
-        fi
-    else
-        ui_error "SSL certificate không tồn tại sau khi cài đặt" "CERT_NOT_FOUND"
-        return 1
-    fi
-
-    # Step 6: Update N8N configuration
-    ui_info "⚙️  Bước 6/7: Cấu hình N8N cho HTTPS"
-    if ! update_n8n_ssl_config "$domain" "$n8n_port"; then
-        ui_warning "Không thể cập nhật cấu hình N8N (có thể cấu hình thủ công sau)"
-    fi
-
-    # Step 7: Final verification
-    ui_info "✅ Bước 7/7: Xác minh cài đặt"
+    # Step 4: Finalize N8N
+    ui_info "Bước 4/4: Cập nhật N8N & Xác minh"
+    update_n8n_ssl_config "$domain" "$n8n_port" || return 1
+    
     if verify_ssl_setup "$domain" "$n8n_port"; then
         echo ""
-        ui_info_box "🎉 SSL setup hoàn tất!" \
-            "✅ Chứng chỉ SSL đã được cài đặt" \
-            "✅ Nginx đã được cấu hình cho HTTPS" \
-            "✅ N8N đã được cập nhật cho HTTPS" \
-            "✅ Auto-renewal đã được cấu hình" \
+        ui_info_box "KÍCH HOẠT BẢO MẬT THÀNH CÔNG" \
+            "Tên miền: $domain" \
+            "Trạng thái: Đã bảo mật (HTTPS)" \
+            "Gia hạn: Tự động hàng tháng" \
             "" \
-            "🌐 Truy cập N8N tại: https://$domain" \
+            "Bạn có thể truy cập ngay tại:" \
+            "https://$domain" \
             "" \
-            "📝 Lưu ý:" \
-            "   • Nếu domain chưa trỏ DNS, hãy đợi DNS propagate" \
-            "   • SSL sẽ tự động gia hạn mỗi 90 ngày" \
-            "   • Kiểm tra logs: /var/log/letsencrypt/"
+            "Lưu ý: Nếu không truy cập được, hãy đảm bảo" \
+            "tên miền đã được trỏ về địa chỉ IP của máy chủ."
         return 0
     else
-        ui_warning "SSL đã được cấu hình nhưng có thể cần điều chỉnh"
-        ui_info "💡 Kiểm tra:"
-        ui_info "   • Domain đã trỏ DNS về server này?"
-        ui_info "   • Firewall đã mở port 80 và 443?"
-        ui_info "   • Nginx đang chạy: sudo systemctl status nginx"
-        ui_info "   • N8N đang chạy: docker ps | grep n8n"
+        ui_warning "Cơ bản đã hoàn tất nhưng có thể DNS chưa cập nhật"
+        ui_info " Vui lòng kiểm tra:"
+        ui_info "   - Tên miền đã trỏ về IP máy chủ chưa?"
+        ui_info "   - Port 80/443 đã được mở trên Firewall chưa?"
         return 1
     fi
 }

@@ -1,80 +1,51 @@
-#!/bin/bash
-
-# DataOnline N8N Manager - Install Configuration Module
-# Phiên bản: 1.0.0
-
 set -euo pipefail
 
 collect_installation_configuration() {
-    ui_header "Cấu hình N8N"
+    ui_section "CẤU HÌNH HỆ THỐNG"
 
-    # N8N Port
-    while true; do
-        echo -n -e "${UI_WHITE}Port cho N8N (mặc định $N8N_DEFAULT_PORT): ${UI_NC}"
-        read -r N8N_PORT
-        N8N_PORT=${N8N_PORT:-$N8N_DEFAULT_PORT}
-
-        if ui_validate_port "$N8N_PORT"; then
-            if is_port_available "$N8N_PORT"; then
-                ui_success "Port N8N: $N8N_PORT"
-                break
-            else
-                ui_error "Port $N8N_PORT đã được sử dụng" "PORT_IN_USE"
-            fi
-        else
-            ui_error "Port không hợp lệ: $N8N_PORT" "INVALID_PORT"
-        fi
-    done
-
-    # PostgreSQL Port
-    while true; do
-        echo -n -e "${UI_WHITE}Port cho PostgreSQL (mặc định $POSTGRES_DEFAULT_PORT): ${UI_NC}"
-        read -r POSTGRES_PORT
-        POSTGRES_PORT=${POSTGRES_PORT:-$POSTGRES_DEFAULT_PORT}
-
-        if ui_validate_port "$POSTGRES_PORT"; then
-            if is_port_available "$POSTGRES_PORT"; then
-                ui_success "Port PostgreSQL: $POSTGRES_PORT"
-                break
-            else
-                ui_error "Port $POSTGRES_PORT đã được sử dụng" "PORT_IN_USE"
-            fi
-        else
-            ui_error "Port không hợp lệ: $POSTGRES_PORT" "INVALID_PORT"
-        fi
-    done
-
-    # Domain & Webhook URL
-    echo ""
-    echo -e "${UI_CYAN}🌐 Domain cho N8N (tùy chọn):${UI_NC}"
-    echo -e "${UI_GRAY}   • Bỏ trống nếu chưa có domain${UI_NC}"
-    echo -e "${UI_GRAY}   • Có thể nhập domain chính (ví dụ: example.com)${UI_NC}"
-    echo -e "${UI_GRAY}   • Hoặc subdomain (ví dụ: n8n.example.com)${UI_NC}"
-    echo ""
-    echo -n -e "${UI_WHITE}Domain (Enter để bỏ qua): ${UI_NC}"
-    read -r N8N_DOMAIN
-
+    # Sử dụng các giá trị mặc định
+    N8N_PORT=$N8N_DEFAULT_PORT
+    POSTGRES_PORT=$POSTGRES_DEFAULT_PORT
+    
+    # Prompt for domain
+    echo -e "${UI_CYAN}Gợi ý: Nếu bạn có tên miền, hệ thống sẽ tự động cấu hình bảo mật HTTPS.${UI_NC}"
+    echo -e "${UI_CYAN}Nếu không, ứng dụng sẽ chạy qua địa chỉ IP của VPS.${UI_NC}"
+    N8N_DOMAIN=$(ui_prompt "Nhập tên miền của bạn (để trống nếu không dùng)" "")
+    
     if [[ -n "$N8N_DOMAIN" ]]; then
-        if ui_validate_domain "$N8N_DOMAIN"; then
-            ui_success "Domain: $N8N_DOMAIN"
-            N8N_WEBHOOK_URL="http://$N8N_DOMAIN"
-        else
-            ui_warning "Domain không hợp lệ, bỏ qua domain"
-            echo -e "${UI_YELLOW}💡 Ví dụ domain hợp lệ: example.com, n8n.example.com${UI_NC}"
+        if ! ui_validate_domain "$N8N_DOMAIN"; then
+            ui_error "Tên miền không hợp lệ. Quy trình sẽ tiếp tục với địa chỉ IP."
             N8N_DOMAIN=""
-            N8N_WEBHOOK_URL="http://localhost:$N8N_PORT"
+        else
+            # Ask for email if domain is present
+            N8N_SSL_EMAIL=$(ui_prompt "Email nhận thông báo bảo mật SSL" "admin@$N8N_DOMAIN")
+            if [[ -z "$N8N_SSL_EMAIL" ]]; then
+                N8N_SSL_EMAIL="admin@$N8N_DOMAIN"
+            fi
         fi
+    fi
+
+    local public_ip=$(get_public_ip || echo "localhost")
+    
+    if [[ -n "$N8N_DOMAIN" ]]; then
+        N8N_WEBHOOK_URL="https://$N8N_DOMAIN"
+        # we'll use https protocol in env/config if domain is present
     else
-        ui_info "Sử dụng localhost với port $N8N_PORT"
-        N8N_WEBHOOK_URL="http://localhost:$N8N_PORT"
+        N8N_WEBHOOK_URL="http://$public_ip:$N8N_PORT"
     fi
 
     # Summary
-    ui_info_box "Tóm tắt cấu hình" \
-        "N8N Port: $N8N_PORT" \
-        "PostgreSQL Port: $POSTGRES_PORT" \
-        "Domain: ${N8N_DOMAIN:-'Chưa cấu hình'}" \
-        "Webhook URL: $N8N_WEBHOOK_URL"
+    ui_info_box "TÓM TẮT THÔNG SỐ CÀI ĐẶT" \
+        "Dịch vụ n8n:      Cổng $N8N_PORT" \
+        "Dữ liệu:          PostgreSQL" \
+        "Tên miền:         ${N8N_DOMAIN:-'[Sử dụng IP]'}" \
+        "Email SSL:        ${N8N_SSL_EMAIL:-'[Không áp dụng]'}" \
+        "Địa chỉ truy cập: $N8N_WEBHOOK_URL"
+
+    echo ""
+    if ! ui_confirm "Bắt đầu cài đặt với cấu hình trên?"; then
+        return 1
+    fi
 
     return 0
 }

@@ -36,7 +36,7 @@ source "\$PROJECT_ROOT/src/core/utils.sh"
 source "\$PLUGIN_DIR/main.sh"
 
 # Tạo backup
-log_info "Starting automated backup..."
+log_info "Đang thực hiện sao lưu tự động..."
 backup_file=\$(create_backup)
 
 # Upload to Google Drive if configured
@@ -51,9 +51,9 @@ EOF
     # Install script with proper permissions
     if sudo cp /tmp/n8n-backup-cron.sh "$cron_script" 2>/dev/null && sudo chmod +x "$cron_script" 2>/dev/null; then
         rm -f /tmp/n8n-backup-cron.sh
-        ui_success "Cron script đã được tạo"
+        ui_success "Lịch trình sao lưu đã được thiết lập"
     else
-        ui_error "Không thể tạo cron script" "CRON_SCRIPT_CREATE_FAILED" "Kiểm tra permissions"
+        ui_error "Không thể thiết lập lịch trình"
         return 1
     fi
     
