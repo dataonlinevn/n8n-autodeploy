@@ -157,6 +157,36 @@ control_nginx_service() {
     esac
 }
 
+# ===== DATABASE SERVICE CONTROL =====
+
+control_database_service() {
+    ui_section "Quan ly Co so du lieu (PostgreSQL)"
+
+    local current_status=$(get_database_status)
+    echo "Trang thai hien tai: $current_status"
+    echo ""
+
+    echo "1) Khoi dong (Start)"
+    echo "2) Dung (Stop)"
+    echo "3) Khoi dong lai (Restart)"
+    echo "4) Kiem tra ket noi"
+    echo "5) Xem trang thai chi tiet"
+    echo "0) Quay lai"
+    echo ""
+
+    choice=$(ui_prompt "Chon chuc nang" "0" "^[0-5]$")
+
+    case "$choice" in
+    1) start_database_service ;;
+    2) stop_database_service ;;
+    3) restart_database_service ;;
+    4) test_database_connection ;;
+    5) show_database_detailed_status ;;
+    0) return ;;
+    *) ui_error "Lua chon khong hop le" ;;
+    esac
+}
+
 # ===== REDIS SERVICE CONTROL =====
 
 control_redis_service() {

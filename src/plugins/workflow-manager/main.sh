@@ -144,9 +144,10 @@ check_gdrive() {
 }
 
 get_gdrive_remote_name() {
-    local RCLONE_CONFIG="${HOME}/.config/rclone/rclone.conf"
+    # Su dung global RCLONE_CONFIG neu co, neu khong dung mac dinh
+    local config_check="${RCLONE_CONFIG:-${HOME}/.config/rclone/rclone.conf}"
     
-    if [[ ! -f "$RCLONE_CONFIG" ]]; then
+    if [[ ! -f "$config_check" ]]; then
         return 1
     fi
     
