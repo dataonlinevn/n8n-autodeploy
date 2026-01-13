@@ -16,6 +16,12 @@ collect_installation_configuration() {
         if ! ui_validate_domain "$N8N_DOMAIN"; then
             ui_error "Tên miền không hợp lệ. Quy trình sẽ tiếp tục với địa chỉ IP."
             N8N_DOMAIN=""
+        else
+            # Ask for email if domain is present
+            N8N_SSL_EMAIL=$(ui_prompt "Email nhận thông báo bảo mật SSL" "admin@$N8N_DOMAIN")
+            if [[ -z "$N8N_SSL_EMAIL" ]]; then
+                N8N_SSL_EMAIL="admin@$N8N_DOMAIN"
+            fi
         fi
     fi
 
@@ -33,6 +39,7 @@ collect_installation_configuration() {
         "Dịch vụ n8n:      Cổng $N8N_PORT" \
         "Dữ liệu:          PostgreSQL" \
         "Tên miền:         ${N8N_DOMAIN:-'[Sử dụng IP]'}" \
+        "Email SSL:        ${N8N_SSL_EMAIL:-'[Không áp dụng]'}" \
         "Địa chỉ truy cập: $N8N_WEBHOOK_URL"
 
     echo ""

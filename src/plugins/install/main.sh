@@ -47,6 +47,7 @@ N8N_PORT=""
 POSTGRES_PORT=""
 N8N_DOMAIN=""
 N8N_WEBHOOK_URL=""
+N8N_SSL_EMAIL=""
 
 # ===== MAIN INSTALLATION MENU =====
 
@@ -111,7 +112,7 @@ handle_n8n_installation() {
             "Phát hiện N8N đã có trên hệ thống." \
             "" \
             "1. Cài đặt lại (Giữ lại dữ liệu cũ)" \
-            "2. Cài đặt mới hoàn toàn (XÓA HẾT DỮ LIỆU)"
+            "2. Cài đặt mới hoàn toàn (XÓA HẾT DỮ LIỆU)" \
             
         local re_choice=$(ui_prompt "Lựa chọn của bạn" "1" "^[1-2]$")
         
@@ -153,7 +154,7 @@ handle_n8n_installation() {
     # Nếu có domain, thực hiện cài đặt SSL ngay tại đây
     if [[ -n "$N8N_DOMAIN" ]]; then
         ui_info "Phát hiện tên miền, đang tự động cấu hình SSL..."
-        local ssl_email="admin@$N8N_DOMAIN" # Default email
+        local ssl_email="${N8N_SSL_EMAIL:-admin@$N8N_DOMAIN}"
         
         # Kiểm tra sự tồn tại của các hàm SSL
         if ! declare -F install_certbot >/dev/null; then
