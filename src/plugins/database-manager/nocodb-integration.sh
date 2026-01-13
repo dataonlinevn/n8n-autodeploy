@@ -26,7 +26,7 @@ add_to_main_manager() {
     
     ui_info_box "Tích hợp Database Manager" \
         "Sẽ thêm menu option vào main manager" \
-        "Option 6: 🗄️  Quản lý Database" \
+        "Option 6: Quản lý Database" \
         "Backup main script trước khi modify"
     
     if ui_confirm "Tích hợp Database Manager vào Main Menu?"; then
@@ -44,7 +44,7 @@ integrate_database_manager_menu() {
     cp "$main_script" "$backup_script"
     
     # Add database manager to show_main_menu function
-    sed -i '/^echo -e "5️⃣.*Cập nhật phiên bản"/a echo -e "6️⃣  🗄️  Quản lý Database"' "$main_script"
+    sed -i '/^echo -e "5) .*Cập nhật phiên bản"/a echo -e "6) Quản lý Database"' "$main_script"
     
     # Add to handle_selection function
     sed -i '/5) handle_updates ;;/a \    6) handle_database_management ;;' "$main_script"
@@ -71,11 +71,11 @@ HANDLER_EOF
     ui_stop_spinner
     ui_success "Database Manager đã được tích hợp!"
     
-    ui_info_box "Integration Complete" \
-        "✅ Menu option đã được thêm" \
-        "✅ Handler function đã được tạo" \
-        "✅ Backup: $backup_script" \
-        "🎯 Test bằng cách chạy main manager"
+    ui_info_box "Hoàn tất tích hợp" \
+        "[OK] Đã thêm lựa chọn vào menu chính" \
+        "[OK] Đã cấu hình bộ xử lý tự động" \
+        "[OK] Đã tạo bản sao lưu an toàn" \
+        "Bạn có thể kiểm tra bằng cách chạy lại Menu chính"
 }
 
 # Export functions

@@ -19,18 +19,20 @@ check_n8n_requirements() {
         "check_docker_installation"
     )
 
+    local missing_reqs=0
     for check in "${checks[@]}"; do
-        if ! $check; then
-            ((errors++))
+        if ! $check >/dev/null 2>&1; then
+            # Run again without silence to show error if it failed
+            $check || ((missing_reqs++))
         fi
     done
 
     echo ""
-    if [[ $errors -eq 0 ]]; then
-        ui_success "Tất cả yêu cầu hệ thống đều được đáp ứng"
+    if [[ $missing_reqs -eq 0 ]]; then
+        ui_success "Hệ thống đáp ứng đầy đủ yêu cầu cài đặt"
         return 0
     else
-        ui_error "Phát hiện $errors lỗi yêu cầu hệ thống" "REQUIREMENTS_FAILED"
+        ui_error "Phát hiện $missing_reqs yêu cầu hệ thống chưa đạt"
         return 1
     fi
 }
@@ -63,10 +65,10 @@ check_disk_space() {
     local free_disk_gb=$(df -BG / | awk 'NR==2 {print $4}' | sed 's/G//')
 
     if [[ "$free_disk_gb" -lt "$REQUIRED_DISK_GB" ]]; then
-        ui_error "Disk: ${free_disk_gb}GB (yêu cầu ${REQUIRED_DISK_GB}GB+)" "LOW_DISK"
+        ui_error "Dung lượng đĩa: Còn ${free_disk_gb}GB (yêu cầu tối thiểu ${REQUIRED_DISK_GB}GB)"
         return 1
     else
-        ui_success "Disk: ${free_disk_gb}GB available"
+        ui_success "Dung lượng đĩa: Hợp lệ (${free_disk_gb}GB trống)"
         return 0
     fi
 }
@@ -142,50 +144,39 @@ check_docker_installation() {
     
     # Kiểm tra và cài đặt Docker nếu chưa có
     if ! command_exists docker; then
-        ui_warning "Docker chưa được cài đặt" "DOCKER_NOT_INSTALLED"
-        echo ""
+        echo -e "${UI_YELLOW}Hệ thống cần cài đặt Docker để vận hành ứng dụng.${UI_NC}"
         
-        if ! ui_confirm "Bạn có muốn tự động cài đặt Docker không?" "y"; then
-            ui_error "Docker là bắt buộc để cài đặt N8N" "DOCKER_REQUIRED"
+        if ! ui_confirm "Bạn có muốn hệ thống tự động cài đặt Docker không?"; then
+            ui_error "Lỗi: Docker là thành phần bắt buộc."
             return 1
         fi
         
-        ui_info "Đang cài đặt Docker..."
+        ui_start_spinner "Đang cài đặt môi trường Docker..."
         
         # Tải và chạy script cài đặt Docker chính thức
         local docker_install_script="/tmp/get-docker.sh"
-        if ! curl -fsSL https://get.docker.com -o "$docker_install_script"; then
-            ui_error "Không thể tải script cài đặt Docker" "DOCKER_DOWNLOAD_FAILED"
+        if ! curl -fsSL https://get.docker.com -o "$docker_install_script" >/dev/null 2>&1; then
+            ui_stop_spinner
+            ui_error "Không thể tải script cài đặt Docker"
             return 1
         fi
         
-        if ! sudo sh "$docker_install_script"; then
-            ui_error "Cài đặt Docker thất bại" "DOCKER_INSTALL_FAILED"
+        if ! sudo sh "$docker_install_script" >/dev/null 2>&1; then
+            ui_stop_spinner
+            ui_error "Cài đặt Docker thất bại"
             rm -f "$docker_install_script"
             return 1
         fi
         
         rm -f "$docker_install_script"
         
-        # Thêm user vào docker group
+        # Thêm user vào docker group (silent)
         if ! groups | grep -q docker; then
-            ui_info "Thêm user vào docker group..."
-            sudo usermod -aG docker "$USER"
-            ui_warning "User đã được thêm vào docker group"
-            ui_info "Để áp dụng thay đổi, bạn có thể:"
-            ui_info "  1. Đăng xuất và đăng nhập lại"
-            ui_info "  2. Hoặc chạy: newgrp docker"
-            ui_info "  3. Hoặc tiếp tục với sudo (nếu cần)"
-            echo ""
-            
-            # Thử sử dụng sg để chạy docker command với group mới
-            # Nếu không được, sẽ dùng sudo
-            if ! sg docker -c "docker info" >/dev/null 2>&1; then
-                ui_info "Sử dụng sudo để chạy Docker commands..."
-            fi
+            sudo usermod -aG docker "$USER" >/dev/null 2>&1
         fi
         
-        ui_success "Docker đã được cài đặt thành công"
+        ui_stop_spinner
+        ui_success "Cài đặt Docker hoàn tất"
     fi
 
     # Kiểm tra và khởi động Docker daemon
@@ -199,27 +190,19 @@ check_docker_installation() {
             ui_warning "Docker daemon không chạy, đang khởi động..."
             
             if ! sudo systemctl start docker; then
-                ui_error "Không thể khởi động Docker daemon" "DOCKER_DAEMON_START_FAILED"
+                ui_error "Không thể khởi động dịch vụ Docker"
                 return 1
             fi
             
             # Enable Docker để tự động khởi động khi boot
             sudo systemctl enable docker >/dev/null 2>&1
-            
-            # Chờ một chút để Docker daemon khởi động hoàn toàn
-            sleep 2
+            sleep 1
             
             # Kiểm tra lại
             if ! docker info >/dev/null 2>&1 && ! sudo docker info >/dev/null 2>&1; then
-                ui_error "Docker daemon vẫn không chạy" "DOCKER_DAEMON_NOT_RUNNING"
+                ui_error "Dịch vụ Docker gặp lỗi không thể khởi động"
                 return 1
             fi
-            
-            if ! docker info >/dev/null 2>&1; then
-                docker_cmd="sudo docker"
-            fi
-            
-            ui_success "Docker daemon đã được khởi động"
         fi
     fi
 
@@ -230,37 +213,24 @@ check_docker_installation() {
         fi
     fi
 
-    # Kiểm tra và cài đặt Docker Compose nếu thiếu
-    if ! command_exists docker-compose && ! $docker_cmd compose version >/dev/null 2>&1; then
-        ui_warning "Docker Compose chưa được cài đặt, đang cài đặt..."
-        
-        if ! sudo apt-get update -qq; then
-            ui_error "Không thể cập nhật package list" "APT_UPDATE_FAILED"
-            return 1
-        fi
-        
-        if ! sudo apt-get install -y docker-compose-plugin; then
-            ui_error "Cài đặt Docker Compose thất bại" "DOCKER_COMPOSE_INSTALL_FAILED"
-            return 1
-        fi
-        
-        ui_success "Docker Compose đã được cài đặt"
-    fi
-
-    # Hiển thị thông tin phiên bản
-    
-    local docker_version=$($docker_cmd --version 2>/dev/null | cut -d' ' -f3 | cut -d',' -f1 || echo "unknown")
-    ui_success "Docker: $docker_version"
-    
     # Kiểm tra Docker Compose
-    if $docker_cmd compose version >/dev/null 2>&1; then
-        local compose_version=$($docker_cmd compose version 2>/dev/null | cut -d' ' -f4 || echo "unknown")
-        ui_success "Docker Compose: $compose_version"
-    elif command_exists docker-compose; then
-        local compose_version=$(docker-compose --version 2>/dev/null | cut -d' ' -f4 | cut -d',' -f1 || echo "unknown")
-        ui_success "Docker Compose: $compose_version"
+    if ! command_exists docker-compose && ! $docker_cmd compose version >/dev/null 2>&1; then
+        ui_start_spinner "Đang cài đặt Docker Compose..."
+        
+        if ! sudo apt-get update -qq && sudo apt-get install -y docker-compose-plugin >/dev/null 2>&1; then
+            ui_stop_spinner
+            ui_error "Cài đặt Docker Compose thất bại"
+            return 1
+        fi
+        
+        ui_stop_spinner
+        ui_success "Cài đặt Docker Compose hoàn tất"
     fi
 
+    # Hiển thị thông tin phiên bản (Silent if already installed)
+    # local docker_version=$($docker_cmd --version 2>/dev/null | cut -d' ' -f3 | cut -d',' -f1 || echo "unknown")
+    # ui_success "Docker: $docker_version"
+    
     return 0
 }
 

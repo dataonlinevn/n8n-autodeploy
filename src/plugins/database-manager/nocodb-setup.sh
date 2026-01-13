@@ -19,57 +19,23 @@ NOCODB_JWT_SECRET=""
 configure_nocodb_domain() {
     ui_section "Cấu hình Domain cho NocoDB"
     
-    local main_domain=$(config_get "n8n.domain" "")
-    
-    echo "📊 **Lựa chọn domain cho NocoDB:**"
+    echo "Lựa chọn domain cho NocoDB:"
     echo ""
-    
-    if [[ -n "$main_domain" ]]; then
-        echo "1) 🔗 Sử dụng subdomain: db.$main_domain"
-        echo "2) 🏠 Nhập domain riêng"
-        echo "3) 📱 Chỉ sử dụng IP:Port"
-    else
-        echo "1) 🏠 Nhập domain riêng"
-        echo "2) 📱 Chỉ sử dụng IP:Port"
-    fi
+    echo "1) Nhập domain riêng"
+    echo "2) Chỉ sử dụng IP:Port"
     echo ""
     
     while true; do
-        if [[ -n "$main_domain" ]]; then
-            read -p "Chọn [1-3]: " domain_choice
-        else
-            read -p "Chọn [1-2]: " domain_choice
-        fi
+        read -p "Chọn [1-2]: " domain_choice
         
         case "$domain_choice" in
         1)
-            if [[ -n "$main_domain" ]]; then
-                NOCODB_DOMAIN="db.$main_domain"
-                ui_status "success" "Domain: $NOCODB_DOMAIN"
-                break
-            else
-                prompt_custom_domain
-                if [[ -n "$NOCODB_DOMAIN" ]]; then break; fi
-            fi
+            prompt_custom_domain
+            if [[ -n "$NOCODB_DOMAIN" ]]; then break; fi
             ;;
         2)
-            if [[ -n "$main_domain" ]]; then
-                prompt_custom_domain
-                if [[ -n "$NOCODB_DOMAIN" ]]; then break; fi
-            else
-                NOCODB_DOMAIN=""
-                ui_status "info" "Sử dụng IP:Port"
-                break
-            fi
-            ;;
-        3)
-            if [[ -n "$main_domain" ]]; then
-                NOCODB_DOMAIN=""
-                ui_status "info" "Sử dụng IP:Port"
-                break
-            else
-                ui_status "error" "Lựa chọn không hợp lệ"
-            fi
+            NOCODB_DOMAIN=""
+            break
             ;;
         *)
             ui_status "error" "Lựa chọn không hợp lệ"
@@ -82,7 +48,7 @@ configure_nocodb_domain() {
 
 prompt_custom_domain() {
     echo ""
-    echo -e "${UI_CYAN}🌐 Nhập domain cho NocoDB:${UI_NC}"
+    echo -e "${UI_CYAN}Nhập domain cho NocoDB:${UI_NC}"
     echo -e "${UI_GRAY}   • Có thể nhập domain chính (ví dụ: example.com)${UI_NC}"
     echo -e "${UI_GRAY}   • Hoặc subdomain (ví dụ: nocodb.example.com)${UI_NC}"
     echo ""
@@ -100,7 +66,7 @@ prompt_custom_domain() {
         return 0
     else
         ui_status "error" "Domain không hợp lệ"
-        echo -e "${UI_YELLOW}💡 Ví dụ domain hợp lệ: example.com, nocodb.example.com${UI_NC}"
+        echo -e "${UI_YELLOW}Ví dụ domain hợp lệ: example.com, nocodb.example.com${UI_NC}"
         return 1
     fi
 }
@@ -110,15 +76,15 @@ prompt_custom_domain() {
 configure_database_mode() {
     ui_section "Lựa chọn Database cho NocoDB"
     
-    echo "📊 **Lựa chọn database:**"
+    echo "Lựa chọn database:"
     echo ""
-    echo "1) 🔗 Dùng chung database với N8N"
-    echo "   ✅ Setup đơn giản, ít tài nguyên"
-    echo "   ⚠️  Performance và security chung"
+    echo "1) Dùng chung database với N8N"
+    echo "   [OK] Setup đơn giản, ít tài nguyên"
+    echo "   [WARN] Performance và security chung"
     echo ""
-    echo "2) 🏠 Database riêng cho NocoDB"
-    echo "   ✅ Độc lập, bảo mật tốt hơn"
-    echo "   ⚠️  Phức tạp hơn, nhiều tài nguyên"
+    echo "2) Database riêng cho NocoDB"
+    echo "   [OK] Độc lập, bảo mật tốt hơn"
+    echo "   [WARN] Phức tạp hơn, nhiều tài nguyên"
     echo ""
     
     while true; do
@@ -130,14 +96,12 @@ configure_database_mode() {
             NOCODB_DB_NAME="n8n"
             # Get N8N postgres password
             NOCODB_DB_PASSWORD=$(grep "POSTGRES_PASSWORD=" "$N8N_COMPOSE_DIR/.env" | cut -d'=' -f2)
-            ui_status "info" "Sử dụng database chung: n8n"
             break
             ;;
         2)
             NOCODB_DATABASE_MODE="separate"
             NOCODB_DB_NAME="nocodb"
             NOCODB_DB_PASSWORD=$(generate_random_string 32)
-            ui_status "info" "Sử dụng database riêng: nocodb"
             break
             ;;
         *)
@@ -177,7 +141,6 @@ setup_admin_account() {
     NOCODB_ADMIN_PASSWORD=$(generate_random_string 16)
     NOCODB_JWT_SECRET=$(generate_random_string 64)
     
-    ui_status "success" "Admin account đã được cấu hình"
     return 0
 }
 
@@ -258,7 +221,6 @@ EOF
     config_set "nocodb.installed_date" "$(date -Iseconds)"
     
     ui_stop_spinner
-    ui_status "success" "Cấu hình đã được lưu"
     return 0
 }
 
@@ -273,7 +235,6 @@ backup_current_compose() {
     cp "$N8N_COMPOSE_DIR/.env" "$backup_dir/.env.backup_$timestamp"
     
     ui_stop_spinner
-    ui_status "success" "Backup hoàn tất"
     return 0
 }
 
@@ -942,21 +903,15 @@ show_installation_summary() {
         nocodb_url="http://$public_ip:8080"
     fi
     
-    ui_info_box "NocoDB Setup Hoàn tất" \
-        "URL: $nocodb_url" \
-        "Email: $NOCODB_ADMIN_EMAIL" \
-        "Password: $NOCODB_ADMIN_PASSWORD" \
-        "Database: $NOCODB_DATABASE_MODE ($NOCODB_DB_NAME)" \
-        "$([ -n "$NOCODB_DOMAIN" ] && echo "Domain: $NOCODB_DOMAIN")"
+    ui_info_box "Cài đặt NocoDB hoàn tất" \
+        "Địa chỉ truy cập: $nocodb_url" \
+        "Tài khoản email: $NOCODB_ADMIN_EMAIL" \
+        "Mật khẩu quản trị: $NOCODB_ADMIN_PASSWORD" \
+        "Chế độ lưu trữ: $([[ "$NOCODB_DATABASE_MODE" == "shared" ]] && echo "Dùng chung với N8N" || echo "Cơ sở dữ liệu riêng")"
     
-    # Show N8N connection info
-    local n8n_password=$(grep "POSTGRES_PASSWORD=" "$N8N_COMPOSE_DIR/.env" | cut -d'=' -f2)
-    ui_info_box "Kết nối N8N Database" \
-        "Host: postgres" \
-        "Port: 5432" \
-        "Database: n8n" \
-        "User: n8n" \
-        "Password: $n8n_password"
+    # Show N8N connection info briefly
+    echo -e "${UI_GRAY}Mật khẩu cơ sở dữ liệu N8N của bạn là: $n8n_password${UI_NC}"
+    echo -e "${UI_GRAY}Sử dụng tên đăng nhập 'n8n' để kết nối dữ liệu.${UI_NC}"
 }
 
 # Export main function

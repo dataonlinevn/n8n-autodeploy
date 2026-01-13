@@ -7,13 +7,13 @@ set -euo pipefail
 
 install_certbot() {
     if command_exists certbot; then
-        ui_success "Certbot đã cài đặt"
+        ui_success "Công cụ Certbot đã sẵn sàng"
         return 0
     fi
 
     ui_run_command "Cài đặt Certbot" "
-        apt update
-        apt install -y certbot python3-certbot-nginx
+        apt update -qq
+        apt install -y certbot python3-certbot-nginx -qq
     "
 }
 
@@ -23,7 +23,7 @@ obtain_ssl_certificate() {
 
     # Kiểm tra xem certificate đã tồn tại chưa
     if [[ -f "/etc/letsencrypt/live/$domain/fullchain.pem" ]]; then
-        ui_info "SSL certificate đã tồn tại cho domain $domain"
+        ui_info "Phát hiện chứng chỉ đã tồn tại cho tên miền $domain"
         
         # Kiểm tra ngày hết hạn
         local expiry_date
@@ -37,10 +37,10 @@ obtain_ssl_certificate() {
             days_remaining=$(((expiry_epoch - now_epoch) / 86400))
             
             if [[ $days_remaining -gt 30 ]]; then
-                ui_success "Certificate còn $days_remaining ngày, sử dụng certificate hiện có"
+                ui_success "Chứng chỉ còn $days_remaining ngày, hệ thống sẽ sử dụng bản hiện có."
                 return 0
             else
-                ui_info "Certificate sắp hết hạn ($days_remaining ngày), đang gia hạn..."
+                ui_info "Chứng chỉ sắp hết hạn ($days_remaining ngày), đang tiến hành gia hạn..."
             fi
         fi
     fi
@@ -64,43 +64,38 @@ obtain_ssl_certificate() {
     
     if [[ $certbot_exit_code -ne 0 ]]; then
         if echo "$certbot_output" | grep -qi "too many certificates.*already issued\|rate limit"; then
-            ui_error "Let's Encrypt rate limit exceeded" "LE_RATE_LIMIT"
+            ui_error "Lỗi: Đã vượt quá giới hạn đăng ký của Let's Encrypt"
             
-            ui_warning_box "Rate Limit Exceeded" \
-                "Domain đã vượt quá 5 certificates/tuần" \
-                "Cần chờ đến tuần sau để thử lại" \
-                "Hoặc sử dụng subdomain khác"
+            ui_warning_box "VƯỢT QUÁ GIỚI HẠN (RATE LIMIT)" \
+                "Tên miền này đã đăng ký quá 5 lần trong tuần." \
+                "Vui lòng đợi đến tuần sau để thử lại," \
+                "hoặc sử dụng một tên miền phụ khác."
             
-            # Nếu certificate đã tồn tại, sử dụng nó
             if [[ -f "/etc/letsencrypt/live/$domain/fullchain.pem" ]]; then
-                ui_info "Sử dụng certificate hiện có"
+                ui_info "Hệ thống sẽ chuyển sang sử dụng bản chứng chỉ hiện có."
                 return 0
             fi
             
-            echo -n -e "${UI_YELLOW}Tạo self-signed certificate tạm thời? [Y/n]: ${UI_NC}"
-            read -r use_self_signed
-            
-            if [[ ! "$use_self_signed" =~ ^[Nn]$ ]]; then
+            if ui_confirm "Bạn có muốn tạo chứng chỉ tạm thời (Self-signed) để sử dụng ngay không?"; then
                 return create_self_signed_certificate "$domain"
             else
                 return 1
             fi
         elif echo "$certbot_output" | grep -qi "already exists\|duplicate"; then
-            ui_warning "Certificate đã tồn tại cho domain này"
+            ui_warning "Bản ghi chứng chỉ đã tồn tại cho tên miền này."
             if [[ -f "/etc/letsencrypt/live/$domain/fullchain.pem" ]]; then
-                ui_success "Sử dụng certificate hiện có"
+                ui_success "Đang sử dụng bản ghi hiện có."
                 return 0
             fi
         else
-            ui_error "Certbot failed" "CERTBOT_FAILED"
+            ui_error "Quá trình đăng ký gặp lỗi kỹ thuật"
             echo ""
             echo -e "${UI_YELLOW}Chi tiết lỗi:${UI_NC}"
-            echo "$certbot_output" | tail -10
+            echo "$certbot_output" | tail -5
             echo ""
-            ui_info "💡 Kiểm tra:"
-            ui_info "   • DNS đã trỏ về server này chưa?"
-            ui_info "   • Port 80 đã mở và nginx đang chạy chưa?"
-            ui_info "   • Domain có đang được sử dụng cho certificate khác không?"
+            ui_info " Vui lòng kiểm tra:"
+            ui_info "   - Tên miền đã trỏ đúng về địa chỉ IP của VPS chưa?"
+            ui_info "   - Cổng 80 đã được mở trên Firewall chưa?"
             return 1
         fi
     fi
@@ -141,29 +136,25 @@ create_self_signed_certificate() {
     # Create self-signed HTTPS config
     create_self_signed_nginx_config "$domain"
     
-    ui_success "Self-signed certificate created"
+    ui_success "Hoàn tất tạo chứng chỉ tạm thời"
     
-    ui_warning_box "Self-Signed Certificate Warning" \
-        "⚠️  Browser sẽ hiển thị cảnh báo security" \
-        "✅ HTTPS vẫn hoạt động (với warning)" \
-        "💡 Có thể thử Let's Encrypt lại sau 1 tuần"
+    ui_warning_box "LƯU Ý VỀ CHỨNG CHỈ TẠM THỜI" \
+        "Trình duyệt sẽ hiển thị cảnh báo không an toàn." \
+        "Kết nối HTTPS vẫn được mã hóa nhưng không được xác thực." \
+        "Bạn nên nâng cấp lên Let's Encrypt sau 1 tuần."
         
     return 0
 }
 
 setup_auto_renewal() {
-    ui_section "Cấu hình tự động gia hạn SSL"
-
     # Enable certbot timer
-    if ! ui_run_command "Kích hoạt auto-renewal" "
+    ui_run_command "Kích hoạt auto-renewal" "
         systemctl enable certbot.timer
         systemctl start certbot.timer
-    "; then
-        return 1
-    fi
+    " || return 1
 
     # Test renewal
-    ui_run_command "Test renewal process" "certbot renew --dry-run"
+    ui_run_command "Test renewal" "certbot renew --dry-run" || return 1
 
     # Create renewal hook
     local renewal_hook="/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh"
@@ -174,9 +165,7 @@ setup_auto_renewal() {
 systemctl reload nginx
 EOF
         chmod +x $renewal_hook
-    "
-
-    ui_success "Auto-renewal đã được cấu hình"
+    " || return 1
 }
 
 export -f install_certbot obtain_ssl_certificate create_self_signed_certificate setup_auto_renewal

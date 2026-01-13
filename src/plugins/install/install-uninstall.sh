@@ -17,20 +17,20 @@ handle_n8n_uninstall() {
     # Show current installation info
     show_current_installation_info
 
-    ui_warning_box "⚠️  CẢNH BÁO GỠ CÀI ĐẶT" \
-        "Sẽ xóa hoàn toàn N8N và tất cả dữ liệu" \
-        "Bao gồm: workflows, executions, credentials" \
-        "Hành động này KHÔNG THỂ HOÀN TÁC!"
+    ui_warning_box "CẢNH BÁO QUAN TRỌNG" \
+        "Hành động này sẽ xóa hoàn toàn n8n và mọi dữ liệu liên quan." \
+        "Bao gồm: Kịch bản (Workflows), Lịch sử thực thi và Tài khoản kết nối." \
+        "Lưu ý: Hành động này không thể hoàn tác!"
 
     # Double confirmation
     if ! ui_confirm "Bạn CHẮC CHẮN muốn gỡ cài đặt N8N?"; then
         return 0
     fi
 
-    echo -n -e "${UI_RED}Nhập 'XAC NHAN' để tiếp tục: ${UI_NC}"
+    echo -n -e "${UI_RED}Vui lòng nhập 'XAC NHAN' để tiếp tục: ${UI_NC}"
     read -r confirmation
     if [[ "$confirmation" != "XAC NHAN" ]]; then
-        ui_info "Hủy gỡ cài đặt"
+        ui_info "Đã hủy bỏ quy trình gỡ cài đặt"
         return 0
     fi
 
@@ -58,7 +58,7 @@ show_current_installation_info() {
     local n8n_port=$(config_get "n8n.port" "5678")
     local n8n_domain=$(config_get "n8n.domain" "")
     
-    echo "📊 **Thông tin N8N:**"
+    echo " **Thông tin N8N:**"
     echo "   Version: $n8n_version"
     echo "   Port: $n8n_port"
     echo "   Domain: ${n8n_domain:-'Chưa cấu hình'}"
@@ -121,7 +121,7 @@ uninstall_n8n_completely() {
     docker stop n8n n8n-postgres n8n-nocodb 2>/dev/null || true
     docker rm n8n n8n-postgres n8n-nocodb 2>/dev/null || true
     ui_stop_spinner
-    ui_success "✅ Services đã dừng"
+    ui_success "[OK] Services đã dừng"
     
     # Step 2: Remove Docker volumes
     ui_start_spinner "Xóa Docker volumes"
@@ -135,7 +135,7 @@ uninstall_n8n_completely() {
         docker volume rm "$volume" 2>/dev/null || true
     done
     ui_stop_spinner
-    ui_success "✅ Docker volumes đã xóa"
+    ui_success "[OK] Docker volumes đã xóa"
     
     # Step 3: Remove installation directory
     ui_run_command "Xóa thư mục cài đặt" "rm -rf /opt/n8n"
@@ -147,7 +147,7 @@ uninstall_n8n_completely() {
     rm -f /etc/systemd/system/n8n.service 2>/dev/null || true
     systemctl daemon-reload 2>/dev/null || true
     ui_stop_spinner
-    ui_success "✅ Systemd service đã xóa"
+    ui_success "[OK] Systemd service đã xóa"
     
     # Step 5: Remove Nginx configs (if any)
     ui_start_spinner "Xóa cấu hình Nginx"
@@ -174,7 +174,7 @@ uninstall_n8n_completely() {
         fi
     fi
     ui_stop_spinner
-    ui_success "✅ Nginx configs đã xóa"
+    ui_success "[OK] Nginx configs đã xóa"
     
     # Step 6: Clean up manager config
     ui_start_spinner "Dọn dẹp cấu hình manager"
@@ -186,15 +186,15 @@ uninstall_n8n_completely() {
     config_set "nocodb.installed" "false"
     config_set "nocodb.domain" ""
     ui_stop_spinner
-    ui_success "✅ Cấu hình manager đã dọn dẹp"
+    ui_success "[OK] Cấu hình manager đã dọn dẹp"
     
     # Step 7: Remove cron jobs (if any)
     ui_start_spinner "Xóa cron jobs"
     crontab -l 2>/dev/null | grep -v "n8n-backup" | crontab - 2>/dev/null || true
     ui_stop_spinner
-    ui_success "✅ Cron jobs đã xóa"
+    ui_success "[OK] Cron jobs đã xóa"
     
-    ui_success "🎉 N8N đã được gỡ cài đặt hoàn toàn!"
+    ui_success "Hệ thống n8n đã được gỡ cài đặt hoàn toàn!"
 }
 
 backup_existing_installation() {

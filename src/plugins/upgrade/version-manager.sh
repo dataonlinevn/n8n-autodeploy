@@ -67,34 +67,26 @@ get_available_versions() {
 }
 
 show_available_versions() {
-    ui_section "Các phiên bản N8N có sẵn"
+    ui_section "Danh sách Phiên bản mới nhất"
 
-    ui_start_spinner "Lấy danh sách phiên bản từ DockerHub"
-    local versions=($(get_available_versions 15))
+    ui_start_spinner "Đang kết nối với thư viện n8n..."
+    local versions=($(get_available_versions 10))
     ui_stop_spinner
 
     if [[ ${#versions[@]} -eq 0 ]]; then
-        ui_status "error" "Không thể lấy danh sách phiên bản"
-
-        # Show fallback versions
-        echo "📋 Một số phiên bản phổ biến:"
-        echo "   1. 1.99.1"
-        echo "   2. 1.99.0"
-        echo "   3. 1.98.2"
-        echo "   4. latest"
+        ui_error "Không thể kết nối để lấy danh sách phiên bản"
         return 1
     fi
 
-    echo "📋 ${#versions[@]} phiên bản mới nhất:"
     for i in "${!versions[@]}"; do
         local version="${versions[$i]}"
         local status=""
 
         if [[ "$version" == "$CURRENT_VERSION" ]]; then
-            status=" ${UI_GREEN}(hiện tại)${UI_NC}"
+            status=" ${UI_GREEN}(bản hiện tại)${UI_NC}"
         fi
 
-        echo "   $((i + 1)). $version$status"
+        echo "   $((i + 1)). v$version$status"
     done
     echo ""
 }
@@ -155,20 +147,18 @@ check_breaking_changes() {
 
     for breaking_ver in "${breaking_versions[@]}"; do
         if is_version_in_range "$from_version" "$to_version" "$breaking_ver"; then
-            ui_status "warning" "⚠️  Breaking change ở v$breaking_ver"
+            ui_info "Lưu ý: Có thay đổi quan trọng ở v$breaking_ver"
             has_breaking=true
         fi
     done
 
     if [[ "$has_breaking" == "true" ]]; then
-        ui_warning_box "Cảnh báo Breaking Changes" \
-            "Phiên bản này có thể không tương thích ngược" \
-            "Khuyến nghị backup đầy đủ trước khi nâng cấp" \
-            "Kiểm tra workflows sau khi upgrade"
+        ui_warning_box "CẢNH BÁO THAY ĐỔI LỚN" \
+            "Phiên bản mới có những thay đổi quan trọng về cấu trúc." \
+            "Vui lòng đảm bảo bạn đã sao lưu dữ liệu trước khi tiếp tục."
 
-        return $(ui_confirm "Tiếp tục với rủi ro breaking changes?")
+        return $(ui_confirm "Bạn vẫn muốn thực hiện nâng cấp chứ?")
     else
-        ui_status "success" "Không có breaking changes đã biết"
         return 0
     fi
 }
@@ -207,7 +197,7 @@ get_release_info() {
     fi
 
     rm -f "$temp_file"
-    echo "ℹ️  Không có thông tin release cho v$version"
+    echo "  Không có thông tin release cho v$version"
     return 1
 }
 
@@ -228,10 +218,9 @@ validate_version_exists() {
     ui_stop_spinner
 
     if [[ "$status_code" == "200" ]]; then
-        ui_status "success" "Phiên bản $version tồn tại"
         return 0
     else
-        ui_status "error" "Phiên bản $version không tồn tại"
+        ui_error "Phiên bản $version không được tìm thấy"
         return 1
     fi
 }

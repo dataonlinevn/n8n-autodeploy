@@ -8,7 +8,7 @@ set -euo pipefail
 
 # Source core modules
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$PLUGIN_DIR")")"
+PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$(dirname "$PLUGIN_DIR")")")"
 
 [[ -z "${LOGGER_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/logger.sh"
 [[ -z "${CONFIG_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/config.sh"
@@ -35,40 +35,36 @@ BACKUP_ID=""
 # ===== MAIN UPGRADE ORCHESTRATOR =====
 
 upgrade_n8n_main() {
-    ui_header "N8N Version Upgrade Manager"
+    ui_header "Nâng cấp Phiên bản n8n"
 
-    ui_status "info" "🔍 Bước 1/5: Kiểm tra yêu cầu nâng cấp"
+    ui_info "Đang kiểm tra các điều kiện nâng cấp..."
     if ! check_upgrade_prerequisites; then
-        ui_status "error" "Yêu cầu nâng cấp không đáp ứng"
         return 1
     fi
 
-    ui_status "info" "📋 Bước 2/5: Chọn phiên bản nâng cấp"
     if ! select_upgrade_version; then
         return 0
     fi
 
-    ui_status "info" "💾 Bước 3/5: Tạo backup trước nâng cấp"
     if ! create_upgrade_backup; then
-        ui_status "error" "Backup thất bại, hủy nâng cấp"
+        ui_error "Dừng nâng cấp do không thể sao lưu dữ liệu"
         return 1
     fi
 
-    ui_status "info" "🚀 Bước 4/5: Thực hiện nâng cấp"
+    ui_info "Đang tiến hành quá trình nâng cấp..."
     if ! execute_upgrade; then
-        ui_status "error" "Nâng cấp thất bại, đang rollback..."
+        ui_error "Nâng cấp thất bại, đang hoàn tác (Rollback)..."
         rollback_upgrade "$BACKUP_ID"
         return 1
     fi
 
-    ui_status "info" "✅ Bước 5/5: Xác minh nâng cấp"
     if ! verify_upgrade; then
-        ui_status "error" "Verification thất bại, đang rollback..."
+        ui_error "Hệ thống gặp lỗi sau nâng cấp, đang hoàn tác..."
         rollback_upgrade "$BACKUP_ID"
         return 1
     fi
 
-    ui_status "success" "🎉 Nâng cấp N8N thành công!"
+    ui_success "Chúc mừng! Ứng dụng n8n đã được nâng cấp thành công."
     show_upgrade_summary
     return 0
 }
@@ -76,50 +72,51 @@ upgrade_n8n_main() {
 # ===== PRE-UPGRADE CHECKS =====
 
 check_upgrade_prerequisites() {
-    ui_section "Kiểm tra yêu cầu nâng cấp"
+    ui_section "Kiểm tra hệ thống"
 
     local errors=0
 
     # Check N8N installation
     if ! is_n8n_installed; then
-        ui_status "error" "N8N chưa được cài đặt"
+        ui_error "Ứng dụng n8n chưa được cài đặt"
         ((errors++))
     fi
 
     # Check Docker
     if ! command_exists docker; then
-        ui_status "error" "Docker không có sẵn"
+        ui_error "Không tìm thấy môi trường Docker"
         ((errors++))
     fi
 
     # Check docker-compose file
     if [[ ! -f "$N8N_COMPOSE_DIR/docker-compose.yml" ]]; then
-        ui_status "error" "Không tìm thấy docker-compose.yml"
+        ui_error "Thiếu tệp tin cấu hình docker-compose.yml"
         ((errors++))
     fi
 
     # Check disk space (minimum 2GB)
     local free_space_gb=$(df -BG "$N8N_COMPOSE_DIR" | awk 'NR==2 {print $4}' | sed 's/G//')
     if [[ "$free_space_gb" -lt 2 ]]; then
-        ui_status "error" "Cần ít nhất 2GB dung lượng trống"
+        ui_error "Dung lượng trống không đủ (cần tối thiểu 2GB)"
         ((errors++))
-    else
-        ui_status "success" "Dung lượng: ${free_space_gb}GB"
     fi
 
     # Check current version
     CURRENT_VERSION=$(get_current_n8n_version)
-    if [[ -z "$CURRENT_VERSION" ]]; then
-        ui_status "error" "Không thể xác định phiên bản hiện tại"
+    if [[ "$CURRENT_VERSION" == "unknown" ]]; then
+        ui_error "Không thể xác định phiên bản hiện tại"
         ((errors++))
-    else
-        ui_status "success" "Phiên bản hiện tại: $CURRENT_VERSION"
     fi
 
-    # Check network connectivity
+    # Check internet connection
     if ! check_internet_connection; then
-        ui_status "error" "Không có kết nối internet"
+        ui_error "Không có kết nối Internet"
         ((errors++))
+    fi
+
+    if [[ $errors -eq 0 ]]; then
+        ui_info "Phiên bản hiện tại: v$CURRENT_VERSION"
+        ui_info "Hệ thống đã sẵn sàng để nâng cấp."
     fi
 
     return $errors
@@ -152,7 +149,7 @@ select_upgrade_version() {
 
     ui_info_box "Phiên bản hiện tại" "N8N: $CURRENT_VERSION"
 
-    echo "📋 Chọn phiên bản để nâng cấp:"
+    echo " Chọn phiên bản để nâng cấp:"
     for i in "${!versions[@]}"; do
         local version="${versions[$i]}"
         local status=""
@@ -163,9 +160,9 @@ select_upgrade_version() {
 
         echo -e "$((i + 1))) 🚀 N8N v$version$status"
     done
-    echo "$((${#versions[@]} + 1))) 📋 Nhập phiên bản khác"
+    echo "$((${#versions[@]} + 1)))  Nhập phiên bản khác"
     echo "$((${#versions[@]} + 2))) ↩️  Rollback"
-    echo "0) ❌ Hủy bỏ"
+    echo "0) [FAIL] Hủy bỏ"
     echo ""
 
     while true; do
@@ -217,24 +214,18 @@ select_specific_version() {
 
 confirm_upgrade() {
     echo ""
-    ui_warning_box "Xác nhận nâng cấp" \
-        "Từ: $CURRENT_VERSION" \
-        "Đến: $TARGET_VERSION" \
-        "⚠️  Quá trình này sẽ restart N8N"
+    ui_warning_box "XÁC NHẬN NÂNG CẤP" \
+        "Từ phiên bản: $CURRENT_VERSION" \
+        "Lên phiên bản: $TARGET_VERSION" \
+        "Ứng dụng sẽ tự động khởi động lại trong giây lát."
 
-    echo -n -e "${UI_YELLOW}Tiếp tục nâng cấp? [Y/n]: ${UI_NC}"
-    read -r confirm
-
-    case "$confirm" in
-    [Nn] | [Nn][Oo])
-        ui_status "info" "Hủy nâng cấp"
+    if ! ui_confirm "Bạn có chắc chắn muốn bắt đầu nâng cấp?"; then
+        ui_info "Đã hủy bỏ quy trình."
         return 1
-        ;;
-    *)
-        ui_status "info" "Bắt đầu nâng cấp..."
-        return 0
-        ;;
-    esac
+    fi
+    
+    ui_info "Bắt đầu nâng cấp..."
+    return 0
 }
 
 # ===== UPGRADE EXECUTION =====
@@ -277,7 +268,7 @@ execute_upgrade() {
     fi
 
     # Step 5: Start with new version
-    if ! ui_run_command "Khởi động N8N mới" "
+    if ! ui_run_command "Cập nhật ứng dụng" "
         cd '$N8N_COMPOSE_DIR'
         docker compose up -d n8n
     "; then
@@ -285,14 +276,13 @@ execute_upgrade() {
     fi
 
     # Step 6: Wait for startup
-    ui_start_spinner "Chờ N8N khởi động"
-    local max_wait=60
+    ui_start_spinner "Đang khởi động lại ứng dụng n8n..."
+    local max_wait=30
     local waited=0
 
     while [[ $waited -lt $max_wait ]]; do
         if curl -s "http://localhost:$(config_get "n8n.port" "5678")/healthz" >/dev/null 2>&1; then
             ui_stop_spinner
-            ui_status "success" "N8N đã khởi động"
             return 0
         fi
         sleep 2
@@ -300,7 +290,7 @@ execute_upgrade() {
     done
 
     ui_stop_spinner
-    ui_status "error" "Timeout chờ N8N khởi động"
+    ui_error "Ứng dụng không phản hồi sau thời gian cài đặt"
     return 1
 }
 
@@ -390,10 +380,10 @@ show_upgrade_summary() {
     local n8n_url="http://localhost:$(config_get "n8n.port" "5678")"
 
     ui_info_box "Tóm tắt nâng cấp" \
-        "✅ Từ: $CURRENT_VERSION" \
-        "✅ Đến: $new_version" \
-        "✅ Backup ID: $BACKUP_ID" \
-        "🌐 URL: $n8n_url" \
+        "[OK] Từ: $CURRENT_VERSION" \
+        "[OK] Đến: $new_version" \
+        "[OK] Backup ID: $BACKUP_ID" \
+        " URL: $n8n_url" \
         "📁 Backup: $BACKUP_BASE_DIR/$BACKUP_ID"
 
     ui_status "info" "Lưu ý: Backup sẽ tự động xóa sau 30 ngày"

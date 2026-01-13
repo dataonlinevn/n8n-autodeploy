@@ -21,19 +21,15 @@ create_nginx_http_config() {
         fi
     fi
 
-    ui_section "Tạo cấu hình Nginx HTTP"
-
     # Step 1: Create webroot directory
-    if ! ui_run_command "Tạo webroot directory" "
+    ui_run_command "Cấu hình Webroot directory" "
         mkdir -p $WEBROOT_PATH/.well-known/acme-challenge
         chown www-data:www-data $WEBROOT_PATH -R
         chmod 755 $WEBROOT_PATH -R
-    "; then
-        return 1
-    fi
+    " || return 1
 
     # Step 2: Create HTTP-only nginx config for certification
-    ui_start_spinner "Tạo HTTP config cho Let's Encrypt"
+    ui_start_spinner "Đang thiết lập cấu hình máy chủ Nginx..."
 
     sudo tee "$nginx_conf" > /dev/null <<'NGINX_EOF'
 server {
@@ -71,28 +67,14 @@ NGINX_EOF
     sudo sed -i "s|PORT_PLACEHOLDER|$n8n_port|g" "$nginx_conf"
 
     ui_stop_spinner
-    ui_success "HTTP config tạo thành công"
 
-    # Step 3: Enable site
-    if ! ui_run_command "Enable nginx site" "
-        ln -sf $nginx_conf /etc/nginx/sites-enabled/
-    "; then
-        return 1
-    fi
+    # Enable site
+    ln -sf "$nginx_conf" /etc/nginx/sites-enabled/ 2>/dev/null || true
+    
+    # Test and reload nginx
+    nginx -t >/dev/null 2>&1 || { ui_error "Cấu hình Nginx gặp lỗi"; return 1; }
+    ui_run_command "Kích hoạt máy chủ" "systemctl reload nginx" || return 1
 
-    # Step 4: Test nginx config
-    if ! ui_run_command "Test nginx configuration" "nginx -t"; then
-        ui_error "Nginx config có lỗi" "NGINX_CONFIG_ERROR" "Kiểm tra config"
-        rm -f "/etc/nginx/sites-enabled/$(basename $nginx_conf)"
-        return 1
-    fi
-
-    # Step 5: Reload nginx
-    if ! ui_run_command "Reload nginx" "systemctl reload nginx"; then
-        return 1
-    fi
-
-    ui_success "Nginx HTTP config hoạt động"
     return 0
 }
 
@@ -112,15 +94,7 @@ create_nginx_ssl_config() {
         fi
     fi
 
-    ui_section "Nâng cấp lên HTTPS config"
-
-    # Verify SSL files exist
-    if [[ ! -f "/etc/letsencrypt/live/$domain/fullchain.pem" ]]; then
-        ui_error "SSL certificate không tồn tại" "CERT_NOT_FOUND"
-        return 1
-    fi
-
-    ui_start_spinner "Tạo HTTPS config"
+    ui_start_spinner "Đang kích hoạt chế độ bảo mật HTTPS..."
 
     sudo tee "$nginx_conf" > /dev/null <<'NGINX_EOF'
 server {
@@ -190,18 +164,13 @@ NGINX_EOF
 
     ui_stop_spinner
 
-    # Test nginx config
-    if ! ui_run_command "Test HTTPS configuration" "nginx -t"; then
-        ui_error "HTTPS config có lỗi" "NGINX_HTTPS_ERROR"
-        return 1
-    fi
+    # Enable site
+    ln -sf "$nginx_conf" /etc/nginx/sites-enabled/ 2>/dev/null || true
+    
+    # Test and reload nginx
+    nginx -t >/dev/null 2>&1 || { ui_error "Cấu hình HTTPS gặp lỗi"; return 1; }
+    ui_run_command "Áp dụng cấu hình bảo mật" "systemctl reload nginx" || return 1
 
-    # Reload nginx
-    if ! ui_run_command "Reload nginx với HTTPS" "systemctl reload nginx"; then
-        return 1
-    fi
-
-    ui_success "HTTPS config hoạt động"
     return 0
 }
 

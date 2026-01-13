@@ -152,9 +152,9 @@ show_progress() {
     printf "\r${LOG_CYAN}[TIẾN TRÌNH]${LOG_NC} $message... "
     
     if wait $!; then
-        echo -e "${LOG_GREEN}✅${LOG_NC}"
+        echo -e "${LOG_GREEN}[OK]${LOG_NC}"
     else
-        echo -e "${LOG_RED}❌${LOG_NC}"
+        echo -e "${LOG_RED}[FAIL]${LOG_NC}"
         return 1
     fi
 }

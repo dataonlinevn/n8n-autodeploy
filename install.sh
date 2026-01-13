@@ -81,26 +81,20 @@ check_requirements() {
 
 # Install manager
 install_manager() {
-    log_info "Installing DataOnline N8N Manager..."
+    echo -e "${BLUE}[INFO]${NC} Đang cài đặt DataOnline N8N Manager..."
     
     # Remove existing installation
-    if [[ -d "$INSTALL_DIR" ]]; then
-        log_warn "Removing existing installation"
-        sudo rm -rf "$INSTALL_DIR"
-    fi
+    sudo rm -rf "$INSTALL_DIR"
     
     # Check if we're in a git repository (development mode)
     local current_dir
     current_dir="$(pwd)"
     if [[ -d "$current_dir/.git" ]] && [[ -f "$current_dir/scripts/manager.sh" ]]; then
-        log_info "Development mode detected: Using local source at $current_dir"
-        log_info "Copying from local source..."
         sudo cp -r "$current_dir" "$INSTALL_DIR"
         sudo rm -rf "$INSTALL_DIR/.git"
     else
         # Clone repository
-        log_info "Downloading latest version..."
-        sudo git clone "$REPO_URL" "$INSTALL_DIR"
+        sudo git clone -q "$REPO_URL" "$INSTALL_DIR" >/dev/null 2>&1
     fi
     
     # Set permissions
@@ -110,41 +104,43 @@ install_manager() {
     # Create global command
     sudo ln -sf "$INSTALL_DIR/scripts/manager.sh" "$BINARY_PATH"
     
-    log_success "Manager installed to $INSTALL_DIR"
+    log_success "Đã cài đặt bộ quản lý tại $INSTALL_DIR"
 }
 
 # Setup completion
 complete_setup() {
-    log_success "Installation completed successfully!"
+    ui_success "Cài đặt thành công!"
     echo ""
-    echo -e "${GREEN}Quick Start:${NC}"
-    echo -e "  ${BLUE}dataonline-n8n-manager${NC}     # Start manager"
-    echo -e "  ${BLUE}$INSTALL_DIR/scripts/manager.sh${NC}  # Alternative command"
+    echo -e "${UI_GREEN}Khởi động nhanh:${UI_NC}"
+    echo -e "  ${UI_BLUE}dataonline-n8n-manager${UI_NC}     # Mở bộ quản lý"
     echo ""
-    echo -e "${GREEN}Next Steps:${NC}"
-    echo "  1. Run the manager and install N8N"
-    echo "  2. Configure domain and SSL (optional)"
-    echo "  3. Setup automated backups"
+    echo -e "${UI_GREEN}Bước tiếp theo:${UI_NC}"
+    echo "  1. Chạy lệnh trên để bắt đầu cài đặt n8n"
+    echo "  2. Cấu hình tên miền và SSL (tùy chọn)"
+    echo "  3. Thiết lập sao lưu tự động"
     echo ""
 }
 
 # Main installation function
 main() {
+    # Check for UI module
+    if [[ -f "./src/core/ui.sh" ]]; then
+        source "./src/core/ui.sh"
+    fi
+
     show_header
     
-    log_info "Starting DataOnline N8N Manager installation..."
+    echo -e "${UI_BLUE}[HỆ THỐNG]${UI_NC} Đang khởi động trình cài đặt DataOnline N8N Manager..."
     echo ""
     
     # Confirm installation
-    echo -n "Continue with installation? [Y/n]: "
+    echo -n "Bạn có muốn tiếp tục cài đặt không? [Y/n]: "
     read -r confirm
     if [[ "$confirm" =~ ^[Nn]$ ]]; then
-        log_info "Installation cancelled"
+        echo -e "${UI_YELLOW}[HỦY]${UI_NC} Đã dừng quá trình cài đặt."
         exit 0
     fi
     
-    echo ""
-    check_requirements
     echo ""
     install_manager
     echo ""

@@ -36,14 +36,10 @@ readonly APP_VERSION="$(config_get "app.version")"
 
 # Khởi tạo ứng dụng
 init_app() {
-    log_debug "Đang khởi tạo DataOnline N8N Manager..."
-
     # Thiết lập log level từ config
     local log_level
-    log_level=$(config_get "logging.level")
+    log_level=$(config_get "logging.level" "info")
     set_log_level "$log_level"
-
-    log_debug "Ứng dụng đã được khởi tạo"
 }
 
 # ===== STATUS HELPERS =====
@@ -52,11 +48,11 @@ init_app() {
 get_n8n_menu_status() {
     if command_exists docker && docker ps --format '{{.Names}}' | grep -q "^n8n$"; then
         local version=$(docker exec n8n n8n --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
-        echo -e "${UI_GREEN}🟢 Running (v$version)${UI_NC}"
+        echo -e "${UI_GREEN}Đang chạy (v$version)${UI_NC}"
     elif [[ -f "/opt/n8n/docker-compose.yml" ]]; then
-        echo -e "${UI_YELLOW}🟡 Installed (stopped)${UI_NC}"
+        echo -e "${UI_YELLOW}Đã cài đặt (đang dừng)${UI_NC}"
     else
-        echo -e "${UI_RED}🔴 Not Installed${UI_NC}"
+        echo -e "${UI_RED}Chưa cài đặt${UI_NC}"
     fi
 }
 
@@ -70,14 +66,14 @@ get_ssl_menu_status() {
         local days_left=$(((expiry_epoch - now_epoch) / 86400))
         
         if [[ $days_left -gt 30 ]]; then
-            echo -e "${UI_GREEN}🟢 Active ($days_left days)${UI_NC}"
+            echo -e "${UI_GREEN}An toàn (còn $days_left ngày)${UI_NC}"
         elif [[ $days_left -gt 0 ]]; then
-            echo -e "${UI_YELLOW}🟡 Expires in $days_left days${UI_NC}"
+            echo -e "${UI_YELLOW}Sắp hết hạn ($days_left ngày)${UI_NC}"
         else
-            echo -e "${UI_RED}🔴 Expired${UI_NC}"
+            echo -e "${UI_RED}Đã hết hạn${UI_NC}"
         fi
     else
-        echo -e "${UI_GRAY}⚪ Not Configured${UI_NC}"
+        echo -e "${UI_GRAY}Chưa thiết lập${UI_NC}"
     fi
 }
 
@@ -111,9 +107,9 @@ get_workflow_count_menu() {
     echo "?"
 }
 
-# Menu chính với status indicators
+# Menu chính với dashboard style
 show_main_menu() {
-    clear
+    ui_header "$APP_NAME" "$APP_VERSION"
     
     # Get statuses
     local n8n_status=$(get_n8n_menu_status)
@@ -121,42 +117,25 @@ show_main_menu() {
     local backup_count=$(get_backup_count)
     local workflow_count=$(get_workflow_count_menu)
     
-    # Header
-    echo -e "${UI_CYAN}$APP_NAME${UI_NC}"
-    echo -e "${UI_CYAN}Phiên bản: v$APP_VERSION${UI_NC}"
-    echo -e "${UI_CYAN}https://dataonline.vn${UI_NC}"
+    # Dashboard Panel
+    echo -e "  ${UI_BOLD}${UI_WHITE}TRẠNG THÁI HỆ THỐNG:${UI_NC}"
+    echo -e "  ${UI_CYAN}•${UI_NC}  N8N Service:     $n8n_status"
+    echo -e "  ${UI_CYAN}•${UI_NC}  Domain SSL:      $ssl_status"
+    echo -e "  ${UI_CYAN}•${UI_NC}  Bản sao lưu:     $backup_count bản ($workflow_count workflow)"
     echo ""
     
-    # Quick Status Panel
-    echo -e "${UI_WHITE}SYSTEM STATUS${UI_NC}"
-    echo "   N8N:       $n8n_status"
-    echo "   SSL:       $ssl_status"
-    echo "   Backups:   $backup_count backups"
-    echo "   Workflows: $workflow_count workflows"
+    # Menu Options Grouped
+    echo -e "  ${UI_BOLD}${UI_WHITE}1.${UI_NC} Cài đặt N8N                  ${UI_BOLD}${UI_WHITE}A.${UI_NC} Thông tin hệ thống"
+    echo -e "  ${UI_BOLD}${UI_WHITE}2.${UI_NC} Tên miền & SSL               ${UI_BOLD}${UI_WHITE}B.${UI_NC} Cấu hình Manager"
+    echo -e "  ${UI_BOLD}${UI_WHITE}3.${UI_NC} Quản lý dịch vụ              ${UI_BOLD}${UI_WHITE}C.${UI_NC} Trợ giúp & Tài liệu"
+    echo -e "  ${UI_BOLD}${UI_WHITE}4.${UI_NC} Sao lưu & Khôi phục          ${UI_BOLD}${UI_WHITE}D.${UI_NC} Chế độ gỡ lỗi"
+    echo -e "  ${UI_BOLD}${UI_WHITE}5.${UI_NC} Nâng cấp N8N"
+    echo -e "  ${UI_BOLD}${UI_WHITE}6.${UI_NC} Quản lý Database (NocoDB)"
+    echo -e "  ${UI_BOLD}${UI_WHITE}7.${UI_NC} Quản lý Workflow"
     echo ""
-    
-    # Main Functions - Grouped
-    echo -e "${UI_WHITE}INSTALLATION & SETUP${UI_NC}"
-    echo "   1. Cài đặt N8N"
-    echo "   5. Cập nhật phiên bản"
+    echo -e "  ${UI_BOLD}${UI_WHITE}0.${UI_NC} Thoát"
     echo ""
-    echo -e "${UI_WHITE}MANAGEMENT${UI_NC}"
-    echo "   2. Quản lý tên miền & SSL"
-    echo "   3. Quản lý dịch vụ"
-    echo "   4. Sao lưu & khôi phục"
-    echo ""
-    echo -e "${UI_WHITE}DATABASE & WORKFLOWS${UI_NC}"
-    echo "   6. Quản lý Database"
-    echo "   7. Workflow Manager"
-    echo ""
-    echo -e "${UI_WHITE}SUPPORT${UI_NC}"
-    echo "   A. Thông tin hệ thống"
-    echo "   B. Cấu hình"
-    echo "   C. Trợ giúp & tài liệu"
-    echo "   D. Chế độ debug"
-    echo ""
-    echo "   0. Thoát"
-    echo ""
+    echo -n -e "  ${UI_WHITE}Lựa chọn của bạn: ${UI_NC}"
 }
 
 # Xử lý lựa chọn menu
@@ -176,11 +155,11 @@ handle_selection() {
     C | c) show_help ;;
     D | d) toggle_debug_mode ;;
     0)
-        log_success "Cảm ơn bạn đã sử dụng DataOnline N8N Manager!"
+        ui_info "Cảm ơn bạn đã sử dụng DataOnline N8N Manager!"
         exit 0
         ;;
     *)
-        log_error "Lựa chọn không hợp lệ: $choice"
+        ui_error "Lựa chọn không hợp lệ"
         ;;
     esac
 }
@@ -195,8 +174,7 @@ handle_installation() {
         # Gọi hàm main của plugin
         install_n8n_main
     else
-        log_error "Không tìm thấy plugin cài đặt"
-        log_info "Đường dẫn: $install_plugin"
+        ui_error "Không tìm thấy module cài đặt"
         return 1
     fi
 }
@@ -216,11 +194,12 @@ handle_domain_management() {
     # Menu quản lý domain
     echo "1) Cấu hình SSL với Let's Encrypt"
     echo "2) Kiểm tra trạng thái SSL"
-    echo "3) Gia hạn chứng chỉ SSL"
+    echo "3) Gia hạn chứng chỉ SSL (thủ công)"
+    echo "4) Thiết lập gia hạn tự động (Cronjob)"
     echo "0) Quay lại"
     echo ""
 
-    read -p "Chọn [0-3]: " domain_choice
+    read -p "Chọn [0-4]: " domain_choice
 
     case "$domain_choice" in
     1)
@@ -240,6 +219,9 @@ handle_domain_management() {
         ;;
     3)
         renew_ssl_certificate
+        ;;
+    4)
+        setup_ssl_auto_renewal
         ;;
     0)
         return
@@ -270,7 +252,7 @@ check_ssl_status() {
 
     # Kiểm tra domain từ cấu hình
     local domain
-    domain=$(config_get "n8n.domain")
+    domain=$(config_get "n8n.domain" "")
 
     if [[ -z "$domain" ]]; then
         log_error "Chưa cấu hình domain trong hệ thống"
@@ -300,35 +282,35 @@ check_ssl_status() {
     if [[ -f "$nginx_config" ]]; then
         # Kiểm tra file có trống không
         if [[ ! -s "$nginx_config" ]]; then
-            log_warning "⚠️ File cấu hình Nginx trống: $nginx_config"
+            log_warn "File cấu hình Nginx trống: $nginx_config"
             log_info "Đang tự động tạo lại cấu hình nginx..."
             
             # Tự động tạo lại nginx config
             if auto_fix_nginx_config "$domain"; then
-                log_success "✅ Đã tạo lại cấu hình Nginx"
+                log_success "Đã tạo lại cấu hình Nginx"
             else
-                log_error "❌ Không thể tạo lại cấu hình Nginx"
-                log_info "💡 Vui lòng chạy 'Cấu hình SSL với Let's Encrypt' để tạo lại"
+                log_error "Không thể tạo lại cấu hình Nginx"
+                log_info "Gợi ý: Vui lòng chạy 'Cấu hình SSL với Let's Encrypt' để tạo lại"
             fi
         else
-            log_success "✅ Cấu hình Nginx cho $domain đã tồn tại"
+            log_success "Cấu hình Nginx cho $domain đã tồn tại"
         fi
     else
-        log_warning "⚠️ Không tìm thấy cấu hình Nginx cho $domain"
+        log_warn "Không tìm thấy cấu hình Nginx cho $domain"
         log_info "Đang tự động tạo cấu hình nginx..."
         
         # Tự động tạo nginx config
         if auto_fix_nginx_config "$domain"; then
-            log_success "✅ Đã tạo cấu hình Nginx"
+            log_success "Đã tạo cấu hình Nginx"
         else
-            log_error "❌ Không thể tạo cấu hình Nginx"
-            log_info "💡 Vui lòng chạy 'Cấu hình SSL với Let's Encrypt' để tạo"
+            log_error "Không thể tạo cấu hình Nginx"
+            log_info "Gợi ý: Vui lòng chạy 'Cấu hình SSL với Let's Encrypt' để tạo"
         fi
     fi
 
     # Kiểm tra chứng chỉ Let's Encrypt
     if [[ -d "/etc/letsencrypt/live/$domain" ]]; then
-        log_success "✅ Chứng chỉ SSL đã được cài đặt"
+        log_success "Chứng chỉ SSL đã được cài đặt"
 
         # Kiểm tra ngày hết hạn
         local expiry_date
@@ -341,14 +323,14 @@ check_ssl_status() {
         days_remaining=$(((expiry_epoch - now_epoch) / 86400))
 
         if [[ $days_remaining -gt 30 ]]; then
-            log_success "✅ SSL còn $days_remaining ngày trước khi hết hạn"
+            log_success "SSL còn $days_remaining ngày trước khi hết hạn"
         elif [[ $days_remaining -gt 0 ]]; then
-            log_warning "⚠️ SSL sẽ hết hạn trong $days_remaining ngày! Cần gia hạn sớm."
+            log_warn "SSL sẽ hết hạn trong $days_remaining ngày! Cần gia hạn sớm."
         else
-            log_error "❌ SSL đã hết hạn! Cần gia hạn ngay."
+            log_error "SSL đã hết hạn! Cần gia hạn ngay."
         fi
     else
-        log_error "❌ Không tìm thấy chứng chỉ SSL cho $domain"
+        log_error "Không tìm thấy chứng chỉ SSL cho $domain"
     fi
 
     # Kiểm tra HTTPS
@@ -357,14 +339,14 @@ check_ssl_status() {
         https_status=$(curl -s -k -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://$domain" 2>/dev/null || echo "000")
         
         if [[ "$https_status" =~ ^(200|301|302|307|308)$ ]]; then
-            log_success "✅ HTTPS hoạt động bình thường (https://$domain) - HTTP $https_status"
+            log_success "HTTPS hoạt động bình thường (https://$domain) - HTTP $https_status"
         elif [[ "$https_status" == "000" ]]; then
-            log_warning "⚠️ Không thể kết nối đến https://$domain"
-            log_info "💡 Có thể domain chưa được trỏ DNS về server này"
-            log_info "💡 Hoặc firewall đang chặn kết nối"
+            log_warn "Không thể kết nối đến https://$domain"
+            log_info "Gợi ý: Có thể domain chưa được trỏ DNS về server này"
+            log_info "Gợi ý: Hoặc firewall đang chặn kết nối"
         else
-            log_warning "⚠️ HTTPS trả về mã lỗi: $https_status"
-            log_info "💡 Kiểm tra cấu hình nginx và SSL certificate"
+            log_warn "HTTPS trả về mã lỗi: $https_status"
+            log_info "Gợi ý: Kiểm tra cấu hình nginx và SSL certificate"
         fi
     fi
 }
@@ -497,17 +479,101 @@ renew_ssl_certificate() {
     log_info "Đang thực hiện gia hạn SSL..."
 
     if certbot renew; then
-        log_success "✅ Gia hạn SSL thành công"
+        log_success "[OK] Gia hạn SSL thành công"
 
         # Khởi động lại Nginx
         if systemctl is-active --quiet nginx; then
             systemctl reload nginx
-            log_success "✅ Đã khởi động lại Nginx"
+            log_success "[OK] Đã khởi động lại Nginx"
         fi
     else
-        log_error "❌ Gia hạn SSL thất bại"
+        log_error "[FAIL] Gia hạn SSL thất bại"
         log_info "Kiểm tra logs: /var/log/letsencrypt/"
     fi
+}
+
+# Thiết lập gia hạn SSL tự động
+setup_ssl_auto_renewal() {
+    echo ""
+    ui_section "Thiết lập Gia hạn SSL Tự động"
+
+    if ! command_exists certbot; then
+        ui_error "Certbot chưa được cài đặt. Vui lòng cấu hình SSL trước."
+        return 1
+    fi
+
+    local cron_file="/etc/cron.d/certbot-renewal"
+    local cron_exists=false
+    
+    # Check existing cronjob
+    if [[ -f "$cron_file" ]] || crontab -l 2>/dev/null | grep -q "certbot"; then
+        cron_exists=true
+        ui_info "Đã phát hiện cronjob gia hạn SSL đang hoạt động."
+    fi
+
+    echo ""
+    echo "TRẠNG THÁI HIỆN TẠI:"
+    if [[ "$cron_exists" == "true" ]]; then
+        echo "  [OK] Gia hạn tự động: Đã kích hoạt"
+        if [[ -f "$cron_file" ]]; then
+            echo "  Lịch chạy: $(cat "$cron_file" | grep certbot | head -1 | awk '{print $1,$2,$3,$4,$5}')"
+        fi
+    else
+        echo "  [FAIL] Gia hạn tự động: Chưa thiết lập"
+    fi
+    echo ""
+
+    echo "1) Kích hoạt gia hạn tự động (2 lần/ngày)"
+    echo "2) Tắt gia hạn tự động"
+    echo "3) Kiểm tra lịch sử gia hạn"
+    echo "0) Quay lại"
+    echo ""
+
+    read -p "Chọn [0-3]: " auto_choice
+
+    case "$auto_choice" in
+    1)
+        ui_start_spinner "Đang thiết lập cronjob..."
+        
+        # Create cronjob file (runs at 3:00 AM and 3:00 PM daily)
+        sudo tee "$cron_file" > /dev/null <<EOF
+# Certbot SSL Auto-Renewal - Installed by DataOnline N8N Manager
+# Runs twice daily as recommended by Let's Encrypt
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+0 3,15 * * * root certbot renew --quiet --deploy-hook "systemctl reload nginx" >> /var/log/certbot-renewal.log 2>&1
+EOF
+        
+        sudo chmod 644 "$cron_file"
+        ui_stop_spinner
+        ui_success "Đã kích hoạt gia hạn tự động!"
+        ui_info "SSL sẽ được kiểm tra và gia hạn tự động lúc 3:00 và 15:00 mỗi ngày."
+        ;;
+    2)
+        if [[ -f "$cron_file" ]]; then
+            sudo rm -f "$cron_file"
+            ui_success "Đã tắt gia hạn tự động."
+        else
+            ui_info "Chưa có cronjob nào được thiết lập."
+        fi
+        ;;
+    3)
+        echo ""
+        ui_section "Lịch sử Gia hạn SSL"
+        if [[ -f "/var/log/certbot-renewal.log" ]]; then
+            tail -20 /var/log/certbot-renewal.log
+        else
+            ui_info "Chưa có log gia hạn. Cronjob có thể chưa chạy lần nào."
+        fi
+        ;;
+    0)
+        return
+        ;;
+    *)
+        ui_error "Lựa chọn không hợp lệ"
+        ;;
+    esac
 }
 
 # Xử lý quản lý dịch vụ
@@ -568,15 +634,15 @@ handle_database_management() {
         log_error "Không tìm thấy Database Manager plugin"
         log_info "Đường dẫn: $database_plugin"
         echo ""
-        echo "🔧 Troubleshooting:"
+        echo " Troubleshooting:"
         echo "1. Kiểm tra plugin đã được cài đặt đúng chưa:"
         echo "   ls -la $PROJECT_ROOT/src/plugins/database-manager/"
         echo ""
         echo "2. Plugin files cần có:"
-        echo "   ✅ main.sh - Entry point"
-        echo "   ✅ nocodb-setup.sh - Docker integration"
-        echo "   ✅ nocodb-config.sh - Views configuration"
-        echo "   ✅ nocodb-management.sh - Operations"
+        echo "   [OK] main.sh - Entry point"
+        echo "   [OK] nocodb-setup.sh - Docker integration"
+        echo "   [OK] nocodb-config.sh - Views configuration"
+        echo "   [OK] nocodb-management.sh - Operations"
         echo ""
         echo "3. Tạo plugin files nếu chưa có:"
         echo "   mkdir -p $PROJECT_ROOT/src/plugins/database-manager/"
@@ -608,7 +674,7 @@ show_system_info() {
     log_info "THÔNG TIN HỆ THỐNG:"
     echo ""
 
-    echo "════════════════════════════════════════"
+    echo "----------------------------------------"
     echo "Thông tin OS:"
     echo "  OS: $(lsb_release -d | cut -f2)"
     echo "  Kernel: $(uname -r)"
@@ -647,32 +713,32 @@ show_system_info() {
     echo ""
     echo "N8N Status:"
     if is_n8n_installed; then
-        echo "  N8N: ✅ Đã cài đặt"
+        echo "  N8N: Đã cài đặt"
         if command_exists docker; then
             local n8n_version=$(docker exec n8n n8n --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
             echo "  Version: $n8n_version"
             echo "  Status: $(docker ps --format '{{.Status}}' --filter 'name=n8n' | head -1 || echo "Stopped")"
         fi
     else
-        echo "  N8N: ❌ Chưa cài đặt"
+        echo "  N8N: Chưa cài đặt"
     fi
     
     echo ""
     echo "Database Manager:"
     if [[ -f "$PROJECT_ROOT/src/plugins/database-manager/main.sh" ]]; then
-        echo "  Plugin: ✅ Đã cài đặt"
+        echo "  Plugin: Đã cài đặt"
         echo "  Files: $(ls -1 "$PROJECT_ROOT/src/plugins/database-manager/" 2>/dev/null | wc -l) files"
         
         # Check NocoDB status if possible
         if command_exists docker && docker ps --format '{{.Names}}' | grep -q "nocodb"; then
-            echo "  NocoDB: ✅ Đang chạy"
+            echo "  NocoDB: Đang chạy"
         elif command_exists curl && curl -s "http://localhost:8080/api/v1/health" >/dev/null 2>&1; then
-            echo "  NocoDB: ✅ API available"
+            echo "  NocoDB: API available"
         else
-            echo "  NocoDB: ❌ Chưa chạy"
+            echo "  NocoDB: Chưa chạy"
         fi
     else
-        echo "  Plugin: ❌ Chưa cài đặt"
+        echo "  Plugin: Chưa cài đặt"
     fi
     
     echo "════════════════════════════════════════"
@@ -750,7 +816,7 @@ show_help() {
     log_info "TRỢ GIÚP & TÀI LIỆU"
     echo ""
 
-    echo "════════════════════════════════════════"
+    echo "----------------------------------------"
     echo "Liên hệ hỗ trợ:"
     echo "  • Website: https://dataonline.vn"
     echo "  • Tài liệu: https://docs.dataonline.vn/n8n-manager"
@@ -772,20 +838,17 @@ show_help() {
     echo "  • Mobile-friendly dashboard"
     echo "  • Monitoring & maintenance tools"
     echo "  • Integration testing"
-    echo "════════════════════════════════════════"
+    echo "----------------------------------------"
     echo ""
 }
 
 # Vòng lặp chính
 main() {
-    # Khởi tạo ứng dụng
     init_app
-
-    log_debug "Bắt đầu vòng lặp ứng dụng chính"
 
     while true; do
         show_main_menu
-        read -p "Nhập lựa chọn [1-6, A-D, 0]: " choice
+        read -r choice
         echo ""
         handle_selection "$choice"
         echo ""

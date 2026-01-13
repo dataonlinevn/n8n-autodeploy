@@ -9,48 +9,47 @@ set -euo pipefail
 # ===== BACKUP CREATION =====
 
 create_upgrade_backup() {
-    ui_section "Tạo backup trước nâng cấp"
+    ui_section "Sao lưu dữ liệu bảo mật"
     
     # Generate backup ID
     BACKUP_ID="upgrade_$(date +%Y%m%d_%H%M%S)"
     local backup_dir="$BACKUP_BASE_DIR/$BACKUP_ID"
     
+    ui_start_spinner "Đang tạo bản sao lưu dữ liệu..."
+    
     # Create backup directory
-    if ! ui_run_command "Tạo thư mục backup" "
-        mkdir -p '$backup_dir'
-        chmod 755 '$backup_dir'
-    "; then
-        return 1
-    fi
+    mkdir -p "$backup_dir"
+    chmod 755 "$backup_dir"
     
     # Create backup metadata
-    create_backup_metadata "$backup_dir"
+    create_backup_metadata "$backup_dir" >/dev/null 2>&1
     
     # Backup database
-    if ! backup_database "$backup_dir"; then
-        ui_status "error" "Database backup thất bại"
+    if ! backup_database "$backup_dir" >/dev/null 2>&1; then
+        ui_stop_spinner
+        ui_error "Lỗi sao lưu cơ sở dữ liệu"
         return 1
     fi
     
     # Backup N8N data volume
-    if ! backup_n8n_data "$backup_dir"; then
-        ui_status "error" "Data volume backup thất bại"
+    if ! backup_n8n_data "$backup_dir" >/dev/null 2>&1; then
+        ui_stop_spinner
+        ui_error "Lỗi sao lưu tệp tin ứng dụng"
         return 1
     fi
     
     # Backup configuration files
-    if ! backup_configuration "$backup_dir"; then
-        ui_status "error" "Config backup thất bại"
-        return 1
-    fi
+    backup_configuration "$backup_dir" >/dev/null 2>&1
     
     # Verify backup
-    if ! verify_backup "$backup_dir"; then
-        ui_status "error" "Backup verification thất bại"
+    if ! verify_backup "$backup_dir" >/dev/null 2>&1; then
+        ui_stop_spinner
+        ui_error "Bản sao lưu không hợp lệ"
         return 1
     fi
     
-    ui_status "success" "Backup hoàn tất: $BACKUP_ID"
+    ui_stop_spinner
+    ui_success "Đã tạo bản sao lưu an toàn."
     return 0
 }
 
@@ -172,7 +171,7 @@ backup_configuration() {
         cp "$CONFIG_FILE" "$config_dir/manager/"
     fi
     
-    ui_status "success" "Configuration backup hoàn tất"
+    ui_info "Sao lưu cấu hình hoàn tất"
     return 0
 }
 
@@ -284,7 +283,7 @@ rollback_upgrade() {
     ui_stop_spinner
     
     if verify_n8n_health; then
-        ui_status "success" "🎉 Rollback thành công!"
+        ui_status "success" " Rollback thành công!"
         return 0
     else
         ui_status "error" "Rollback thất bại - kiểm tra logs"

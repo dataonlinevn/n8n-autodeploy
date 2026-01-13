@@ -13,15 +13,15 @@ readonly N8N_COMPOSE_DIR="/opt/n8n"
 get_n8n_status() {
     if is_docker_installation; then
         if docker ps --format '{{.Names}}' | grep -q "n8n"; then
-            echo -e "${UI_GREEN}🟢 Running${UI_NC}"
+            echo -e "${UI_GREEN}[OK] Đang chạy${UI_NC}"
         else
-            echo -e "${UI_RED}🔴 Stopped${UI_NC}"
+            echo -e "${UI_RED}[STOP] Đã dừng${UI_NC}"
         fi
     else
         if systemctl is-active --quiet n8n 2>/dev/null; then
-            echo -e "${UI_GREEN}🟢 Running${UI_NC}"
+            echo -e "${UI_GREEN}[OK] Đang chạy${UI_NC}"
         else
-            echo -e "${UI_RED}🔴 Stopped${UI_NC}"
+            echo -e "${UI_RED}[STOP] Đã dừng${UI_NC}"
         fi
     fi
 }
@@ -113,24 +113,24 @@ stop_n8n_service() {
 }
 
 restart_n8n_service() {
-    ui_status "info" "Đang restart N8N..."
+    ui_info "Đang khởi động lại ứng dụng n8n..."
 
     if is_docker_installation; then
-        ui_run_command "Restart N8N (Docker)" "
+        ui_run_command "Restart n8n" "
             cd $N8N_COMPOSE_DIR && docker compose restart n8n
         "
     else
-        ui_run_command "Restart N8N (Systemd)" "
+        ui_run_command "Restart n8n" "
             systemctl restart n8n
         "
     fi
 
     # Wait and verify
-    sleep 10
+    sleep 5
     if verify_n8n_health; then
-        ui_status "success" "N8N restart thành công"
+        ui_success "Ứng dụng n8n đã được khởi động lại"
     else
-        ui_status "error" "N8N restart thất bại"
+        ui_warning "Ứng dụng n8n phản hồi chậm, vui lòng kiểm tra lại sau"
     fi
 }
 
@@ -208,16 +208,15 @@ verify_n8n_health() {
 # ===== LOG MANAGEMENT =====
 
 show_n8n_logs() {
-    ui_section "N8N Logs"
+    ui_header "Nhật ký ứng dụng n8n"
 
-    echo "1) 📝 Live logs (real-time)"
-    echo "2) 📝 Recent logs (50 dòng)"
-    echo "3) 📝 Error logs only"
-    echo "0) ⬅️  Quay lại"
+    echo "1) Xem trực tiếp (Real-time)"
+    echo "2) Xem 50 dòng gần nhất"
+    echo "3) Chỉ xem Nhật ký Lỗi (Errors)"
+    echo "0) Quay lại"
     echo ""
 
-    echo -n -e "${UI_WHITE}Chọn [0-3]: ${UI_NC}"
-    read -r choice
+    choice=$(ui_prompt "Lựa chọn của bạn" "0" "^[0-3]$")
 
     case "$choice" in
     1) follow_n8n_logs ;;

@@ -76,7 +76,7 @@ init_config() {
 
 # Tạo file cấu hình mặc định
 create_default_config() {
-    log_info "Đang tạo cấu hình mặc định..."
+    log_debug "Đang tạo cấu hình mặc định..."
     
     cat > "$CONFIG_FILE" << 'CONFIG_EOF'
 # DataOnline N8N Manager - Cấu hình
@@ -109,7 +109,7 @@ auto_setup=true
 provider=letsencrypt
 CONFIG_EOF
 
-    log_success "Đã tạo cấu hình mặc định: $CONFIG_FILE"
+    log_debug "Đã tạo cấu hình mặc định: $CONFIG_FILE"
 }
 
 # Load cấu hình vào cache
@@ -232,7 +232,7 @@ save_config() {
         fi
     } > "$CONFIG_FILE"
     
-    log_success "Đã lưu cấu hình"
+    write_log "SUCCESS" "Đã lưu cấu hình"
 }
 
 # Hiển thị cấu hình hiện tại
