@@ -910,7 +910,8 @@ show_installation_summary() {
         "Chế độ lưu trữ: $([[ "$NOCODB_DATABASE_MODE" == "shared" ]] && echo "Dùng chung với N8N" || echo "Cơ sở dữ liệu riêng")"
     
     # Show N8N connection info briefly
-    echo -e "${UI_GRAY}Mật khẩu cơ sở dữ liệu N8N của bạn là: $n8n_password${UI_NC}"
+    local n8n_db_password="${POSTGRES_PASSWORD:-$(grep 'POSTGRES_PASSWORD=' "$N8N_COMPOSE_DIR/.env" 2>/dev/null | cut -d'=' -f2 || echo 'unknown')}"
+    echo -e "${UI_GRAY}Mật khẩu cơ sở dữ liệu N8N của bạn là: $n8n_db_password${UI_NC}"
     echo -e "${UI_GRAY}Sử dụng tên đăng nhập 'n8n' để kết nối dữ liệu.${UI_NC}"
 }
 

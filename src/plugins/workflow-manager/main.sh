@@ -17,10 +17,10 @@ PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$(dirname "$PLUGIN_DIR")")")"
 [[ -z "${SPINNER_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/spinner.sh"
 
 # Constants
-readonly WORKFLOW_MANAGER_LOADED=true
-readonly N8N_API_BASE="http://localhost:5678/api/v1"
-readonly N8N_API_KEY_FILE="/opt/n8n/.n8n-api-key"
-readonly GDRIVE_FOLDER="n8n-workflows"
+[[ -z "${WORKFLOW_MANAGER_LOADED:-}" ]] && readonly WORKFLOW_MANAGER_LOADED=true
+[[ -z "${N8N_API_BASE:-}" ]] && readonly N8N_API_BASE="http://localhost:5678/api/v1"
+[[ -z "${N8N_API_KEY_FILE:-}" ]] && readonly N8N_API_KEY_FILE="/opt/n8n/.n8n-api-key"
+[[ -z "${GDRIVE_FOLDER:-}" ]] && readonly GDRIVE_FOLDER="n8n-workflows"
 
 # Global variables
 N8N_API_KEY=""

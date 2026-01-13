@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-readonly N8N_COMPOSE_DIR="/opt/n8n"
+[[ -z "${N8N_COMPOSE_DIR:-}" ]] && readonly N8N_COMPOSE_DIR="/opt/n8n"
 
 # ===== STATUS FUNCTIONS =====
 

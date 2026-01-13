@@ -20,9 +20,9 @@ source "$PLUGIN_DIR/backup-gdrive.sh"
 source "$PLUGIN_DIR/backup-scheduler.sh"
 
 # Constants
-readonly BACKUP_BASE_DIR="/opt/n8n/backups"
-readonly RCLONE_CONFIG="$HOME/.config/rclone/rclone.conf"
-readonly CRON_JOB_NAME="n8n-backup"
+[[ -z "${BACKUP_BASE_DIR:-}" ]] && readonly BACKUP_BASE_DIR="/opt/n8n/backups"
+[[ -z "${RCLONE_CONFIG:-}" ]] && readonly RCLONE_CONFIG="$HOME/.config/rclone/rclone.conf"
+[[ -z "${CRON_JOB_NAME:-}" ]] && readonly CRON_JOB_NAME="n8n-backup"
 
 # ===== BACKUP FUNCTIONS =====
 
@@ -167,11 +167,12 @@ EOF
     local final_size=$(du -sh "${BACKUP_BASE_DIR}/${backup_name}.tar.gz" 2>/dev/null | cut -f1 || echo "unknown")
     log_success "[OK] Quy trình sao lưu hoàn tất: ${backup_name}.tar.gz ($final_size)" >&2
     
+    # In tổng kết ra stderr để không bị lẫn vào output capture
     ui_info_box "Tổng kết sao lưu" \
         "Tên file: ${backup_name}.tar.gz" \
         "Kích thước: $final_size" \
         "Nội dung: n8n Database, n8n Data, Cấu hình hệ thống$([[ "$nocodb_installed" == "true" ]] && echo ", NocoDB Data")" \
-        "Vị trí: $BACKUP_BASE_DIR"
+        "Vị trí: $BACKUP_BASE_DIR" >&2
 
     # Chỉ echo đường dẫn file, không có log messages
     echo "$BACKUP_BASE_DIR/${backup_name}.tar.gz"
@@ -281,7 +282,7 @@ restore_backup() {
     local temp_dir="/tmp/n8n_restore_$(date +%s)"
     mkdir -p "$temp_dir"
 
-    log_info "📦 Đang giải nén backup..."
+    log_info "Đang giải nén backup..."
     tar -xzf "$backup_file" -C "$temp_dir"
 
     # FIX: Tìm backup directory đúng cách
@@ -346,7 +347,7 @@ restore_backup() {
 
     # Restore data files nếu có
     if [[ -f "$backup_dir/n8n_data.tar.gz" ]]; then
-        log_info "📁 Restore data files..."
+        log_info "Restore data files..."
         local n8n_volume=$(docker volume inspect --format '{{ .Mountpoint }}' n8n_n8n_data 2>/dev/null)
         
         if [[ -n "$n8n_volume" ]]; then

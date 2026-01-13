@@ -11,10 +11,9 @@ set -euo pipefail
 get_current_n8n_version() {
     local version=""
 
-    # Method 1: From running container (most accurate)
-    if docker ps --format '{{.Names}}' | grep -q "n8n"; then
-        local container_name=$(docker ps --format '{{.Names}}' | grep "n8n" | head -1)
-        version=$(docker exec "$container_name" n8n --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    # Method 1: From running container (most accurate) - tìm chính xác container 'n8n'
+    if docker ps --format '{{.Names}}' | grep -q "^n8n$"; then
+        version=$(docker exec n8n n8n --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
         if [[ -n "$version" ]]; then
             echo "$version"
             return 0
@@ -32,7 +31,7 @@ get_current_n8n_version() {
     fi
 
     # Method 3: From image tag
-    if docker ps --format '{{.Names}}' | grep -q "n8n"; then
+    if docker ps --format '{{.Names}}' | grep -q "^n8n$"; then
         version=$(docker inspect n8n --format '{{.Config.Image}}' 2>/dev/null | cut -d':' -f2)
         if [[ -n "$version" && "$version" != "latest" ]]; then
             echo "$version"
@@ -67,14 +66,14 @@ get_available_versions() {
 }
 
 show_available_versions() {
-    ui_section "Danh sách Phiên bản mới nhất"
+    ui_section "Danh sach phien ban"
 
-    ui_start_spinner "Đang kết nối với thư viện n8n..."
+    ui_start_spinner "Dang lay danh sach..."
     local versions=($(get_available_versions 10))
     ui_stop_spinner
 
     if [[ ${#versions[@]} -eq 0 ]]; then
-        ui_error "Không thể kết nối để lấy danh sách phiên bản"
+        ui_error "Khong the lay danh sach phien ban"
         return 1
     fi
 
@@ -83,10 +82,10 @@ show_available_versions() {
         local status=""
 
         if [[ "$version" == "$CURRENT_VERSION" ]]; then
-            status=" ${UI_GREEN}(bản hiện tại)${UI_NC}"
+            status=" (hien tai)"
         fi
 
-        echo "   $((i + 1)). v$version$status"
+        echo "  $((i + 1)). v$version$status"
     done
     echo ""
 }
@@ -139,25 +138,23 @@ check_breaking_changes() {
     local from_version="$1"
     local to_version="$2"
 
-    ui_section "Kiểm tra breaking changes"
-
     # Known breaking changes (can be expanded)
     local breaking_versions=("1.0.0" "0.200.0" "0.190.0")
     local has_breaking=false
 
     for breaking_ver in "${breaking_versions[@]}"; do
         if is_version_in_range "$from_version" "$to_version" "$breaking_ver"; then
-            ui_info "Lưu ý: Có thay đổi quan trọng ở v$breaking_ver"
+            ui_warning "Luu y: Co thay doi quan trong o v$breaking_ver"
             has_breaking=true
         fi
     done
 
     if [[ "$has_breaking" == "true" ]]; then
-        ui_warning_box "CẢNH BÁO THAY ĐỔI LỚN" \
-            "Phiên bản mới có những thay đổi quan trọng về cấu trúc." \
-            "Vui lòng đảm bảo bạn đã sao lưu dữ liệu trước khi tiếp tục."
-
-        return $(ui_confirm "Bạn vẫn muốn thực hiện nâng cấp chứ?")
+        echo ""
+        echo "LUU Y: Phien ban nay co thay doi lon."
+        echo "Hay dam bao da sao luu du lieu truoc."
+        echo ""
+        return $(ui_confirm "Ban van muon nang cap?")
     else
         return 0
     fi
@@ -187,9 +184,9 @@ get_release_info() {
             local release_date=$(jq -r '.published_at' "$temp_file" | cut -d'T' -f1)
             local release_notes=$(jq -r '.body' "$temp_file" | head -n 5)
 
-            echo "📅 Ngày phát hành: $release_date"
-            echo "📝 Release notes (5 dòng đầu):"
-            echo "$release_notes" | sed 's/^/   /'
+            echo "Ngay phat hanh: $release_date"
+            echo "Ghi chu:"
+            echo "$release_notes" | sed 's/^/  /'
 
             rm -f "$temp_file"
             return 0

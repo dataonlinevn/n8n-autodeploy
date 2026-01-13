@@ -36,11 +36,11 @@ source "$INSTALL_PLUGIN_DIR/install-compose.sh"
 source "$INSTALL_PLUGIN_DIR/install-verify.sh"
 source "$INSTALL_PLUGIN_DIR/install-uninstall.sh"
 
-readonly INSTALL_DOCKER_COMPOSE_VERSION="2.24.5"
-readonly REQUIRED_RAM_MB=2048
-readonly REQUIRED_DISK_GB=10
-readonly N8N_DEFAULT_PORT=5678
-readonly POSTGRES_DEFAULT_PORT=5432
+[[ -z "${INSTALL_DOCKER_COMPOSE_VERSION:-}" ]] && readonly INSTALL_DOCKER_COMPOSE_VERSION="2.24.5"
+[[ -z "${REQUIRED_RAM_MB:-}" ]] && readonly REQUIRED_RAM_MB=2048
+[[ -z "${REQUIRED_DISK_GB:-}" ]] && readonly REQUIRED_DISK_GB=10
+[[ -z "${N8N_DEFAULT_PORT:-}" ]] && readonly N8N_DEFAULT_PORT=5678
+[[ -z "${POSTGRES_DEFAULT_PORT:-}" ]] && readonly POSTGRES_DEFAULT_PORT=5432
 
 # Global variables
 N8N_PORT=""

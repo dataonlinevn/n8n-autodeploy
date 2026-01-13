@@ -22,10 +22,10 @@ source "$PLUGIN_DIR/nocodb-testing.sh"
 source "$PLUGIN_DIR/nocodb-integration.sh"
 
 # Constants
-readonly DATABASE_MANAGER_LOADED=true
-readonly NOCODB_PORT=8080
-readonly NOCODB_CONTAINER="n8n-nocodb"
-readonly N8N_COMPOSE_DIR="/opt/n8n"
+[[ -z "${DATABASE_MANAGER_LOADED:-}" ]] && readonly DATABASE_MANAGER_LOADED=true
+[[ -z "${NOCODB_PORT:-}" ]] && readonly NOCODB_PORT=8080
+[[ -z "${NOCODB_CONTAINER:-}" ]] && readonly NOCODB_CONTAINER="n8n-nocodb"
+[[ -z "${N8N_COMPOSE_DIR:-}" ]] && readonly N8N_COMPOSE_DIR="/opt/n8n"
 
 # ===== MAIN MENU FUNCTION =====
 
@@ -338,32 +338,20 @@ setup_nocodb_ssl() {
             ;;
         esac
     else
-        echo "Domain Options:"
+        # Chỉ có 1 lựa chọn, hỏi domain trực tiếp
         echo ""
-        echo "1) Nhập domain mới"
+        echo "Nhap domain cho NocoDB:"
+        echo "  Vi du: nocodb.example.com"
         echo ""
         
         while true; do
-            read -p "Chọn [1]: " domain_choice
-            case "$domain_choice" in
-            1)
-                echo ""
-                echo -e "${UI_CYAN}Nhập domain cho NocoDB:${UI_NC}"
-                echo -e "${UI_GRAY}   • Có thể nhập domain chính (ví dụ: example.com)${UI_NC}"
-                echo -e "${UI_GRAY}   • Hoặc subdomain (ví dụ: nocodb.example.com)${UI_NC}"
-                echo ""
-                echo -n -e "${UI_WHITE}Domain: ${UI_NC}"
-                read -r nocodb_domain
-                if [[ -n "$nocodb_domain" ]]; then
-                    break
-                else
-                    ui_status "error" "Domain không được để trống"
-                fi
-                ;;
-            *)
-                ui_status "error" "Lựa chọn không hợp lệ"
-                ;;
-            esac
+            echo -n "Domain: "
+            read -r nocodb_domain
+            if [[ -n "$nocodb_domain" ]]; then
+                break
+            else
+                echo "Domain khong duoc de trong"
+            fi
         done
     fi
     

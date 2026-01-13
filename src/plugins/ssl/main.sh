@@ -14,9 +14,9 @@ PLUGIN_PROJECT_ROOT="$(dirname "$(dirname "$(dirname "$PLUGIN_DIR")")")"
 [[ -z "${SPINNER_LOADED:-}" ]] && source "$PLUGIN_PROJECT_ROOT/src/core/spinner.sh"
 
 # Constants
-readonly SSL_LOADED=true
-readonly WEBROOT_PATH="/var/www/html"
-readonly CERTBOT_LOG="/var/log/letsencrypt"
+[[ -z "${SSL_LOADED:-}" ]] && readonly SSL_LOADED=true
+[[ -z "${WEBROOT_PATH:-}" ]] && readonly WEBROOT_PATH="/var/www/html"
+[[ -z "${CERTBOT_LOG:-}" ]] && readonly CERTBOT_LOG="/var/log/letsencrypt"
 
 # Load sub-modules (override local definitions)
 source "$PLUGIN_DIR/ssl-domain.sh"

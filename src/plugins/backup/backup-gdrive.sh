@@ -17,7 +17,8 @@ save_token_json_to_remote() {
 
     # Trich xuat va lam sach JSON (dam bao 1 dong duy nhat, không co khoang trang thua)
     local compact_token
-    compact_token=$(echo "$token_json" | jq -c '.' 2>/dev/null | tr -d '\r\n' || echo "$token_json" | grep -o '{.*}' | tr -d '\r\n')
+    compact_token=$(echo "$token_json" | jq -c '.' 2>/dev/null | tr -d '\r\n') || \
+    compact_token=$(echo "$token_json" | grep -o '{.*}' | tr -d '\r\n')
     
     if [[ -z "$compact_token" ]]; then
         ui_error "Token JSON khong hop le" "TOKEN_JSON_INVALID"
@@ -26,27 +27,49 @@ save_token_json_to_remote() {
 
     ui_info "Đang lưu cấu hình vào remote '$remote_name'..."
     
+    # Đảm bảo thư mục config tồn tại
+    local config_dir="${RCLONE_CONFIG:-$HOME/.config/rclone/rclone.conf}"
+    config_dir=$(dirname "$config_dir")
+    mkdir -p "$config_dir" 2>/dev/null || true
+    
     # Đảm bảo remote tồn tại trước khi cập nhật
     if ! rclone config show "$remote_name" >/dev/null 2>&1; then
         rclone config create "$remote_name" drive --non-interactive >/dev/null 2>&1 || true
     fi
 
-    # Sử dụng rclone config update
-    if rclone config update "$remote_name" token "$compact_token" config_refresh_token=false --non-interactive >/dev/null 2>&1; then
-        # Kiểm tra lại
-        if rclone config show "$remote_name" 2>/dev/null | grep -q "token = {"; then
+    # Phương pháp 1: Sử dụng rclone config update với cú pháp đúng
+    if rclone config update "$remote_name" token "$compact_token" --non-interactive 2>/dev/null; then
+        if rclone config show "$remote_name" 2>/dev/null | grep -qE "token\\s*="; then
             chmod 600 "$RCLONE_CONFIG" 2>/dev/null || true
             ui_success "Lưu cấu hình thành công"
+            save_gdrive_remote_name "$remote_name"
             return 0
         fi
     fi
 
-    # Thu cach ghi de lenh truc tiep neu cach tren fail
-    rclone config update "$remote_name" "token=$compact_token" config_refresh_token=false --non-interactive >/dev/null 2>&1
+    # Phương pháp 2: Ghi trực tiếp vào file rclone.conf
+    local rclone_config_file="${RCLONE_CONFIG:-$HOME/.config/rclone/rclone.conf}"
     
-    if rclone config show "$remote_name" 2>/dev/null | grep -q "token = {"; then
-        chmod 600 "$RCLONE_CONFIG" 2>/dev/null || true
-        ui_success "Luu cau hinh thanh cong"
+    # Xóa section cũ nếu có
+    if [[ -f "$rclone_config_file" ]]; then
+        sed -i "/^\[$remote_name\]/,/^\[/{ /^\[/!d; /^\[$remote_name\]/d }" "$rclone_config_file" 2>/dev/null || true
+    fi
+    
+    # Tạo section mới
+    {
+        echo ""
+        echo "[$remote_name]"
+        echo "type = drive"
+        echo "token = $compact_token"
+        echo "team_drive = "
+    } >> "$rclone_config_file"
+    
+    chmod 600 "$rclone_config_file" 2>/dev/null || true
+    
+    # Kiểm tra lại
+    if rclone config show "$remote_name" 2>/dev/null | grep -qE "token\\s*="; then
+        ui_success "Lưu cấu hình thành công"
+        save_gdrive_remote_name "$remote_name"
         return 0
     fi
 

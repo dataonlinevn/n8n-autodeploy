@@ -75,9 +75,9 @@ run_integration_tests() {
     for result in "${test_results[@]}"; do
         echo "$result"
         if [[ "$result" == "[OK]"* ]]; then
-            ((passed_count++))
+            ((passed_count++)) || true
         else
-            ((failed_count++))
+            ((failed_count++)) || true
         fi
     done
     
@@ -85,12 +85,14 @@ run_integration_tests() {
     local total_count=${#test_results[@]}
     
     if [[ $failed_count -eq 0 ]]; then
-        ui_success "HỆ THỐNG HOẠT ĐỘNG TỐT ($passed_count/$total_count bài kiểm tra thành công)"
-        return 0
+        ui_success "He thong hoat dong tot ($passed_count/$total_count thanh cong)"
     else
-        ui_error "[WARN] CÓ VẤN ĐỀ PHÁT SINH ($passed_count/$total_count bài kiểm tra thành công)"
-        return 1
+        ui_warning "Co van de ($passed_count/$total_count thanh cong)"
     fi
+    
+    echo ""
+    read -p "Nhan Enter de tiep tuc..."
+    return 0
 }
 
 test_nocodb_health() {
