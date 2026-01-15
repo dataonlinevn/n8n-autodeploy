@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+[[ -n "${INSTALL_COMPOSE_LOADED:-}" ]] && return 0
+readonly INSTALL_COMPOSE_LOADED=true
+
 create_docker_compose() {
     local compose_dir="/opt/n8n"
 
@@ -94,7 +97,7 @@ services:
       - QUEUE_HEALTH_CHECK_ACTIVE=true
       - N8N_METRICS=false
     ports:
-      - "PORT_PLACEHOLDER:PORT_PLACEHOLDER"
+      - "BIND_PLACEHOLDER"
     volumes:
       - n8n_data:/home/node/.n8n
       - ./backups:/backups
@@ -117,10 +120,19 @@ DOCKER_EOF
     # Replace placeholders
     local protocol="http"
     local secure_cookie="false"
-    [[ -n "$N8N_DOMAIN" ]] && protocol="https" && secure_cookie="true"
+    local port_binding="${N8N_PORT}:5678"  # Mặc định: bind all interfaces
+    
+    # Nếu có domain, sử dụng HTTPS và bind localhost only (bảo mật)
+    # Nginx sẽ reverse proxy từ HTTPS → localhost:5678
+    if [[ -n "$N8N_DOMAIN" ]]; then
+        protocol="https"
+        secure_cookie="true"
+        port_binding="127.0.0.1:${N8N_PORT}:5678"  # Chỉ cho phép truy cập từ localhost
+    fi
 
     sed -i "s#PASSWORD_PLACEHOLDER#$postgres_password#g" "$temp_compose"
     sed -i "s#PG_PORT_PLACEHOLDER#$POSTGRES_PORT#g" "$temp_compose"
+    sed -i "s#BIND_PLACEHOLDER#$port_binding#g" "$temp_compose"
     sed -i "s#PORT_PLACEHOLDER#$N8N_PORT#g" "$temp_compose"
     sed -i "s#WEBHOOK_PLACEHOLDER#$N8N_WEBHOOK_URL#g" "$temp_compose"
     sed -i "s#PROTOCOL_PLACEHOLDER#$protocol#g" "$temp_compose"

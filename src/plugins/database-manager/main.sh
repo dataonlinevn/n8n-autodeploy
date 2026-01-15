@@ -35,7 +35,7 @@ database_manager_main() {
     while true; do
         show_database_manager_menu
         
-        choice=$(ui_prompt "Chọn chức năng" "0" "^[0-8]$")
+        choice=$(ui_prompt "Chọn chức năng" "0" "^[0-9]$")
 
         case "$choice" in
         1) check_nocodb_status ;;
@@ -46,6 +46,7 @@ database_manager_main() {
         6) troubleshoot_nocodb ;;
         7) run_maintenance_tasks ;;
         8) run_integration_tests ;;
+        9) uninstall_nocodb ;;
         0) return 0 ;;
         *) ui_error "Lựa chọn không hợp lệ" ;;
         esac
@@ -83,6 +84,9 @@ show_database_manager_menu() {
     echo "BẢO TRÌ & KIỂM TRA"
     echo "  7) Tác vụ bảo trì"
     echo "  8) Kiểm tra tích hợp"
+    echo ""
+    echo "QUẢN LÝ HỆ THỐNG"
+    echo "  9) Gỡ cài đặt NocoDB"
     echo ""
     echo "  0) Quay lại"
     echo ""
@@ -520,21 +524,9 @@ obtain_nocodb_ssl_certificate() {
 update_nocodb_ssl_config() {
     local subdomain="$1"
     
-    ui_start_spinner "Cập nhật NocoDB config"
-    
-    # Update .env
-    sed -i "s|NOCODB_PUBLIC_URL=.*|NOCODB_PUBLIC_URL=https://$subdomain|" "$N8N_COMPOSE_DIR/.env"
-    
-    # Save to manager config
-    config_set "nocodb.domain" "$subdomain"
-    config_set "nocodb.ssl_enabled" "true"
-    
-    # Restart NocoDB
-    cd "$N8N_COMPOSE_DIR"
-    docker compose restart nocodb
-    
-    ui_stop_spinner
-    ui_success "NocoDB config cập nhật thành công"
+    # Gọi function từ nocodb-setup.sh để xử lý đầy đủ
+    # Bao gồm cả việc thay đổi port binding
+    update_nocodb_ssl_settings "$subdomain"
 }
 
 # ===== UNINSTALL FUNCTION =====
