@@ -196,18 +196,9 @@ handle_n8n_installation() {
         echo ""
         ui_info_box "CÀI ĐẶT HOÀN TẤT" \
             "Địa chỉ truy cập: $access_url" \
-            "Cơ sở dữ liệu: PostgreSQL" \
-            "" \
-            "Lưu ý: Nếu không thể truy cập, vui lòng kiểm tra" \
-            "Firewall và đảm bảo các cổng 80/443 đã được mở."
-            
-        # Kiểm tra UFW
-        if command -v ufw >/dev/null 2>&1 && sudo ufw status | grep -q "active"; then
-            if ui_confirm "Phát hiện UFW đang bật. Bạn có muốn mở port $N8N_PORT không?"; then
-                sudo ufw allow "$N8N_PORT"/tcp >/dev/null 2>&1
-                ui_success "Đã mở port $N8N_PORT trên UFW"
-            fi
-        fi
+            "Cơ sở dữ liệu:    PostgreSQL (Port: $POSTGRES_PORT)" \
+            "Cache/Queue:      Redis" \
+            "N8N Version:      Latest"
         
         return 0
     else

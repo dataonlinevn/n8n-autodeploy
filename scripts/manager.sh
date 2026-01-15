@@ -191,36 +191,151 @@ handle_domain_management() {
         return 1
     fi
 
+    # Kiểm tra trạng thái domain hiện tại
+    local current_domain=$(config_get "n8n.domain" "")
+    
     # Menu quản lý domain
-    echo "1) Cấu hình SSL với Let's Encrypt"
-    echo "2) Kiểm tra trạng thái SSL"
-    echo "3) Gia hạn chứng chỉ SSL (thủ công)"
-    echo "4) Thiết lập gia hạn tự động (Cronjob)"
-    echo "0) Quay lại"
+    echo ""
+    if [[ -z "$current_domain" ]]; then
+        echo -e "${UI_YELLOW}⚠ Hệ thống đang chạy với IP (không có domain)${UI_NC}"
+        echo ""
+        echo "THIẾT LẬP DOMAIN & SSL:"
+        echo -e "  ${UI_GREEN}→ 1) Chuyển đổi từ IP sang Domain/SSL${UI_NC} ${UI_BOLD}(Khuyến nghị cho bạn)${UI_NC}"
+        echo "  2) Cấu hình SSL thủ công (nâng cao)"
+    else
+        echo -e "${UI_GREEN}✓ Hệ thống đang sử dụng domain: $current_domain${UI_NC}"
+        echo ""
+        echo "THIẾT LẬP DOMAIN & SSL:"
+        echo "  1) Cấu hình SSL với Let's Encrypt"
+        echo "  2) Thay đổi sang domain khác"
+    fi
+    echo ""
+    echo "KIỂM TRA & BẢO TRÌ:"
+    echo "  3) Kiểm tra trạng thái SSL"
+    echo "  4) Kiểm tra bảo mật hệ thống"
+    echo "  5) Gia hạn chứng chỉ SSL (thủ công)"
+    echo "  6) Thiết lập gia hạn tự động (Cronjob)"
+    echo ""
+    echo "  0) Quay lại"
     echo ""
 
-    read -p "Chọn [0-4]: " domain_choice
+    read -p "Chọn [0-6]: " domain_choice
 
     case "$domain_choice" in
     1)
-        # Source plugin SSL
-        local ssl_plugin="$PROJECT_ROOT/src/plugins/ssl/main.sh"
-        if [[ -f "$ssl_plugin" ]]; then
-            source "$ssl_plugin"
-            # Gọi hàm main của plugin
-            setup_ssl_main
+        # Lựa chọn 1 thay đổi tùy theo trạng thái
+        if [[ -z "$current_domain" ]]; then
+            # Chưa có domain → Chuyển đổi từ IP sang Domain/SSL
+            local reconfigure_module="$PROJECT_ROOT/src/plugins/install/install-reconfigure.sh"
+            if [[ -f "$reconfigure_module" ]]; then
+                source "$reconfigure_module"
+                
+                echo ""
+                log_info "CHUYỂN ĐỔI TỪ IP SANG DOMAIN/SSL"
+                echo ""
+                
+                local new_domain=$(ui_prompt "Nhập tên miền của bạn" "" ".*" "Tên miền không hợp lệ" "false")
+                local ssl_email=$(ui_prompt "Email nhận thông báo SSL (ví dụ: example@dataonline.vn)" "" "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" "Email không hợp lệ" "false")
+                
+                reconfigure_to_domain "$new_domain" "$ssl_email"
+            else
+                log_error "Không tìm thấy reconfigure module"
+            fi
         else
-            log_error "Không tìm thấy plugin SSL"
-            log_info "Đường dẫn: $ssl_plugin"
+            # Đã có domain → Cấu hình SSL cho domain hiện tại
+            echo ""
+            log_info "CẤU HÌNH SSL CHO DOMAIN HIỆN TẠI"
+            echo ""
+            
+            ui_info "Domain hiện tại: $current_domain"
+            
+            if ! ui_confirm "Cấu hình SSL cho domain này?"; then
+                return 0
+            fi
+            
+            local ssl_plugin="$PROJECT_ROOT/src/plugins/ssl/main.sh"
+            if [[ ! -f "$ssl_plugin" ]]; then
+                log_error "Không tìm thấy plugin SSL"
+                return 1
+            fi
+            
+            source "$ssl_plugin"
+            
+            # Lấy thông tin cần thiết
+            local n8n_port=$(config_get "n8n.port" "5678")
+            local ssl_email=$(config_get "n8n.ssl_email" "")
+            
+            if [[ -z "$ssl_email" ]]; then
+                ssl_email=$(ui_prompt "Email nhận thông báo SSL (ví dụ: example@dataonline.vn)" "" "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" "Email không hợp lệ" "false")
+            fi
+            
+            # Thực hiện cài đặt SSL
+            ui_info "Đang cài đặt SSL..."
+            
+            if ! command_exists certbot; then
+                install_certbot || return 1
+            fi
+            
+            create_nginx_http_config "$current_domain" "$n8n_port" || return 1
+            
+            if obtain_ssl_certificate "$current_domain" "$ssl_email"; then
+                create_nginx_ssl_config "$current_domain" "$n8n_port" || return 1
+                setup_auto_renewal || ui_warning "Không thể thiết lập gia hạn tự động"
+                
+                # Update config
+                config_set "n8n.ssl_enabled" "true"
+                config_set "n8n.ssl_email" "$ssl_email"
+                
+                ui_success "Cấu hình SSL thành công cho $current_domain"
+            else
+                ui_error "Không thể cấu hình SSL"
+                return 1
+            fi
         fi
         ;;
     2)
-        check_ssl_status
+        # Chuyển đổi từ IP sang Domain/SSL
+        local reconfigure_module="$PROJECT_ROOT/src/plugins/install/install-reconfigure.sh"
+        if [[ -f "$reconfigure_module" ]]; then
+            source "$reconfigure_module"
+            
+            echo ""
+            log_info "CHUYỂN ĐỔI SANG DOMAIN/SSL"
+            echo ""
+            
+            local current_domain=$(config_get "n8n.domain" "")
+            if [[ -n "$current_domain" ]]; then
+                log_warn "Hệ thống đã có domain: $current_domain"
+                if ! ui_confirm "Bạn có muốn thay đổi sang domain khác?"; then
+                    return 0
+                fi
+            fi
+            
+            local new_domain=$(ui_prompt "Nhập tên miền mới" "" ".*" "Tên miền không hợp lệ" "false")
+            local ssl_email=$(ui_prompt "Email nhận thông báo SSL (ví dụ: example@dataonline.vn)" "" "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" "Email không hợp lệ" "false")
+            
+            reconfigure_to_domain "$new_domain" "$ssl_email"
+        else
+            log_error "Không tìm thấy reconfigure module"
+        fi
         ;;
     3)
-        renew_ssl_certificate
+        check_ssl_status
         ;;
     4)
+        # Kiểm tra bảo mật
+        local reconfigure_module="$PROJECT_ROOT/src/plugins/install/install-reconfigure.sh"
+        if [[ -f "$reconfigure_module" ]]; then
+            source "$reconfigure_module"
+            check_security_status
+        else
+            log_error "Không tìm thấy security check module"
+        fi
+        ;;
+    5)
+        renew_ssl_certificate
+        ;;
+    6)
         setup_ssl_auto_renewal
         ;;
     0)

@@ -176,13 +176,17 @@ setup_nocodb_integration() {
 save_nocodb_config() {
     ui_start_spinner "Lưu cấu hình NocoDB"
     
-    # Determine public URL
+    # Determine public URL and port binding
     local public_url
+    local port_binding
+    
     if [[ -n "$NOCODB_DOMAIN" ]]; then
         public_url="https://$NOCODB_DOMAIN"
+        port_binding="127.0.0.1:8080:8080"  # Localhost only - bảo mật
     else
         local public_ip=$(get_public_ip || echo "localhost")
         public_url="http://$public_ip:8080"
+        port_binding="8080:8080"  # Public access
     fi
     
     # Add to .env file
@@ -196,6 +200,7 @@ NOCODB_JWT_SECRET=$NOCODB_JWT_SECRET
 NOCODB_ADMIN_EMAIL=$NOCODB_ADMIN_EMAIL
 NOCODB_ADMIN_PASSWORD=$NOCODB_ADMIN_PASSWORD
 NOCODB_PUBLIC_URL=$public_url
+NOCODB_PORT_BINDING=$port_binding
 
 # Database Configuration
 NC_DB_TYPE=pg
@@ -359,7 +364,7 @@ services:
       - NC_DISABLE_TELE=true
       - NODE_ENV=production
     ports:
-      - "8080:8080"
+      - "${NOCODB_PORT_BINDING}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -466,7 +471,7 @@ services:
       - NC_DISABLE_TELE=true
       - NODE_ENV=production
     ports:
-      - "8080:8080"
+      - "${NOCODB_PORT_BINDING}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -764,18 +769,45 @@ update_nocodb_ssl_settings() {
     
     ui_start_spinner "Cập nhật SSL settings"
     
-    # Update .env
-    sed -i "s|NOCODB_PUBLIC_URL=.*|NOCODB_PUBLIC_URL=https://$domain|" "$N8N_COMPOSE_DIR/.env"
+    # Update hoặc thêm NOCODB_PUBLIC_URL
+    if grep -q "^NOCODB_PUBLIC_URL=" "$N8N_COMPOSE_DIR/.env"; then
+        sed -i "s|^NOCODB_PUBLIC_URL=.*|NOCODB_PUBLIC_URL=https://$domain|" "$N8N_COMPOSE_DIR/.env"
+    else
+        echo "NOCODB_PUBLIC_URL=https://$domain" >> "$N8N_COMPOSE_DIR/.env"
+    fi
+    
+    # Update hoặc thêm NOCODB_PORT_BINDING
+    if grep -q "^NOCODB_PORT_BINDING=" "$N8N_COMPOSE_DIR/.env"; then
+        sed -i "s|^NOCODB_PORT_BINDING=.*|NOCODB_PORT_BINDING=127.0.0.1:8080:8080|" "$N8N_COMPOSE_DIR/.env"
+    else
+        # Thêm sau dòng NOCODB_PUBLIC_URL
+        sed -i "/^NOCODB_PUBLIC_URL=/a NOCODB_PORT_BINDING=127.0.0.1:8080:8080" "$N8N_COMPOSE_DIR/.env"
+    fi
+    
+    # Update hoặc thêm NOCODB_DOMAIN
+    if grep -q "^NOCODB_DOMAIN=" "$N8N_COMPOSE_DIR/.env"; then
+        sed -i "s|^NOCODB_DOMAIN=.*|NOCODB_DOMAIN=$domain|" "$N8N_COMPOSE_DIR/.env"
+    else
+        echo "NOCODB_DOMAIN=$domain" >> "$N8N_COMPOSE_DIR/.env"
+    fi
     
     # Update config
     config_set "nocodb.ssl_enabled" "true"
-    
-    # Restart NocoDB
-    cd "$N8N_COMPOSE_DIR"
-    docker compose restart nocodb >/dev/null 2>&1
+    config_set "nocodb.domain" "$domain"
     
     ui_stop_spinner
-    ui_status "success" "SSL settings cập nhật"
+    
+    # Recreate NocoDB container với port binding mới
+    cd "$N8N_COMPOSE_DIR"
+    ui_start_spinner "Khởi động lại NocoDB với cấu hình bảo mật"
+    
+    # Down và up lại để áp dụng port binding mới
+    docker compose stop nocodb > /dev/null 2>&1
+    docker compose rm -f nocodb > /dev/null 2>&1
+    docker compose up -d nocodb > /dev/null 2>&1
+    
+    ui_stop_spinner
+    ui_status "success" "SSL settings cập nhật - Port binding: 127.0.0.1:8080"
 }
 
 # ===== REMOVAL FUNCTIONS =====
